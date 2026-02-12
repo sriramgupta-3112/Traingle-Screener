@@ -8,22 +8,21 @@ import time
 import threading
 import requests
 import schedule
+from datetime import datetime, timedelta, timezone
 
 # ==========================================
 # 1. CONFIGURATION & SECRETS
 # ==========================================
 
 # 🔐 SECURITY SETTINGS
-APP_PASSWORD = "trading-god-mode"  # <--- CHANGE THIS PASSWORD
+APP_PASSWORD = "trading-god-mode" 
 
-# 📱 TELEGRAM SETTINGS (Optional)
-# 1. Search "@BotFather" -> /newbot -> Get Token
-# 2. Search "@userinfobot" -> Get ID
+# 📱 TELEGRAM SETTINGS
 TELEGRAM_BOT_TOKEN = "YOUR_BOT_TOKEN_HERE" 
 TELEGRAM_CHAT_ID = "YOUR_CHAT_ID_HERE"
-ENABLE_TELEGRAM = False  # Set to True to enable alerts
+ENABLE_TELEGRAM = False 
 
-# --- 🌍 EXTENDED LIQUID ASSET LISTS ---
+# --- 🌍 FULL UNREDUCED LIQUID ASSET LISTS ---
 
 # 1. NIFTY F&O (High Option Volume)
 LIQUID_FNO = [
@@ -107,7 +106,6 @@ SCAN_CONFIGS = [
 # ==========================================
 
 def get_pivots(series, order=8):
-    """ Finds significant Highs and Lows """
     values = series.values
     if len(values) == 0: return [], []
     high_idx = argrelextrema(values, np.greater, order=order)[0]
@@ -115,7 +113,6 @@ def get_pivots(series, order=8):
     return high_idx, low_idx
 
 def check_line_integrity(series, idx_start, idx_end, slope, intercept, mode="upper"):
-    """ Ensures price does not cut through the trendline """
     if idx_end <= idx_start: return False
     x_range = np.arange(idx_start, idx_end + 1)
     line_values = slope * x_range + intercept
@@ -129,57 +126,81 @@ def check_line_integrity(series, idx_start, idx_end, slope, intercept, mode="upp
     
     return not np.any(violations)
 
+def check_market_status(df):
+    """
+    Determines if the market is ONLINE based on the last candle timestamp.
+    Returns: (is_online: bool, last_time_str: str)
+    """
+    if df.empty: return False, "N/A"
+    
+    last_candle_time = df.index[-1]
+    
+    # Convert to UTC for comparison
+    if last_candle_time.tzinfo is None:
+        now = datetime.now()
+    else:
+        now = datetime.now(timezone.utc)
+        last_candle_time = last_candle_time.astimezone(timezone.utc)
+        
+    diff = now - last_candle_time
+    
+    # Logic: Online if last candle < 60 mins old
+    is_online = diff < timedelta(minutes=60)
+    time_str = last_candle_time.strftime("%H:%M")
+    
+    return is_online, time_str
+
 def analyze_ticker(df):
-    """ Main Pattern Recognition Function """
     if len(df) < 50: return None
     
-    # 1. Find Pivots
+    # 1. Check Status
+    is_online, last_time = check_market_status(df)
+
+    # 2. Pivots
     high_idxs, low_idxs = get_pivots(df['High'], order=8)
     if len(high_idxs) < 2 or len(low_idxs) < 2: return None
 
-    # 2. Get Last 2 Major Swings
     Ax, Cx = high_idxs[-2], high_idxs[-1]
     Ay, Cy = df['High'].iloc[Ax], df['High'].iloc[Cx]
     Bx, Dx = low_idxs[-2], low_idxs[-1]
     By, Dy = df['Low'].iloc[Bx], df['Low'].iloc[Dx]
 
-    # 3. Geometry Check (Triangle Shape)
+    # 3. Geometry
     if not (Ay > Cy and By < Dy): return None
 
-    # 4. Math (Slopes)
+    # 4. Slopes
     slope_upper = (Cy - Ay) / (Cx - Ax)
     intercept_upper = Ay - (slope_upper * Ax)
     slope_lower = (Dy - By) / (Dx - Bx)
     intercept_lower = By - (slope_lower * Bx)
 
-    # 5. Integrity Check (No Cuts)
+    # 5. Integrity
     if not check_line_integrity(df['High'], Ax, Cx, slope_upper, intercept_upper, "upper"): return None
     if not check_line_integrity(df['Low'], Bx, Dx, slope_lower, intercept_lower, "lower"): return None
 
-    # 6. Projection (The "E" Leg)
+    # 6. Projection
     current_idx = len(df) - 1
     proj_upper = (slope_upper * current_idx) + intercept_upper
     proj_lower = (slope_lower * current_idx) + intercept_lower
     current_price = df['Close'].iloc[-1]
     
-    # Price must be INSIDE the triangle
     if not (proj_lower < current_price < proj_upper): return None
     
-    # Triangle must be TIGHT (Coiling)
     width_pct = (proj_upper - proj_lower) / current_price
     
-    if width_pct < 0.035: # < 3.5% Range
+    if width_pct < 0.035:
         return {
             "pivots": {"Ax": Ax, "Ay": Ay, "Cx": Cx, "Cy": Cy, "Bx": Bx, "By": By, "Dx": Dx, "Dy": Dy},
             "slopes": {"upper": slope_upper, "lower": slope_lower},
             "intercepts": {"upper": intercept_upper, "lower": intercept_lower},
             "coil_width": width_pct,
-            "price": current_price
+            "price": current_price,
+            "is_online": is_online,
+            "last_time": last_time
         }
     return None
 
 def resample_data(df, interval):
-    """ Resamples 1h data to 4h """
     logic = {'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last', 'Volume': 'sum'}
     return df.resample(interval).agg(logic).dropna()
 
@@ -188,16 +209,14 @@ def resample_data(df, interval):
 # ==========================================
 
 def plot_triangle_clean(df, ticker, data_dict, interval_label):
-    # 1. ZOOM LOGIC (Dynamic 2X Context)
     pattern_start_idx = min(data_dict['pivots']['Ax'], data_dict['pivots']['Bx'])
     pattern_len = len(df) - pattern_start_idx
-    # Show pattern + 1.5x history before it
+    # 2X Context Zoom
     history_buffer = int(pattern_len * 1.5) 
     start_view_idx = max(0, pattern_start_idx - history_buffer)
     
     df_slice = df.iloc[start_view_idx:].copy()
     
-    # 2. FORMAT X-AXIS (Readable Dates)
     if interval_label in ["5m", "15m"]:
         date_format = "%d %H:%M" 
     else:
@@ -205,7 +224,6 @@ def plot_triangle_clean(df, ticker, data_dict, interval_label):
 
     df_slice['date_str'] = df_slice.index.strftime(date_format)
 
-    # 3. CREATE CHART
     fig = go.Figure(data=[go.Candlestick(
         x=df_slice['date_str'], 
         open=df_slice['Open'], high=df_slice['High'],
@@ -213,22 +231,17 @@ def plot_triangle_clean(df, ticker, data_dict, interval_label):
         name=ticker
     )])
 
-    # 4. DRAW LINES
     x_indices = np.arange(len(df))
-    
-    # Upper Line
     slope_u = data_dict['slopes']['upper']
     int_u = data_dict['intercepts']['upper']
     line_start_u = data_dict['pivots']['Ax']
     y_vals_upper = slope_u * x_indices[line_start_u:] + int_u
     
-    # Lower Line
     slope_l = data_dict['slopes']['lower']
     int_l = data_dict['intercepts']['lower']
     line_start_l = data_dict['pivots']['Bx']
     y_vals_lower = slope_l * x_indices[line_start_l:] + int_l
 
-    # Clip lines to view
     def get_slice_dates(start_idx):
         eff_start = max(start_idx, start_view_idx)
         return df_slice['date_str'][eff_start - start_view_idx:].tolist()
@@ -286,9 +299,12 @@ class BackgroundScanner:
                         
                         match = analyze_ticker(df)
                         if match:
-                            msg = f"🚀 {ticker} ({config['label']}) Alert!\nPrice: {match['price']:.2f}\nCoil: {match['coil_width']*100:.1f}%"
-                            print(msg)
-                            send_telegram_alert(msg)
+                            # Prioritize Online or 4H alerts
+                            if match['is_online'] or config['label'] == '4h':
+                                status_icon = "🟢" if match['is_online'] else "🔴"
+                                msg = f"{status_icon} {ticker} ({config['label']}) Alert!\nPrice: {match['price']:.2f}\nCoil: {match['coil_width']*100:.1f}%"
+                                print(msg)
+                                send_telegram_alert(msg)
                     except: continue
             except: continue
 
@@ -307,16 +323,14 @@ scanner = BackgroundScanner()
 scanner.start()
 
 # ==========================================
-# 5. STREAMLIT UI (SECURE)
+# 5. STREAMLIT UI
 # ==========================================
 
 st.set_page_config(page_title="Triangle Pro", layout="wide")
 
-# Initialize Session
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 
-# --- LOGIN FORM ---
 if not st.session_state.authenticated:
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
@@ -324,7 +338,6 @@ if not st.session_state.authenticated:
         with st.form("login_form"):
             password = st.text_input("Enter Access Code", type="password")
             submit = st.form_submit_button("Unlock Dashboard", type="primary")
-            
             if submit:
                 if password == APP_PASSWORD:
                     st.session_state.authenticated = True
@@ -333,10 +346,8 @@ if not st.session_state.authenticated:
                     st.error("❌ Incorrect Access Code")
 
 else:
-    # --- MAIN DASHBOARD ---
     st.title("🔻 Triangle Hunter Pro")
     
-    # Status Bar
     col1, col2 = st.columns([4, 1])
     with col1:
         st.caption(f"✅ System Active | Monitoring {len(ALL_TICKERS)} Liquid Assets")
@@ -345,7 +356,6 @@ else:
             st.session_state.authenticated = False
             st.rerun()
 
-    # Timeframe Tabs
     tabs = st.tabs(["⚡ 5 Min", "⏱️ 15 Min", "hourly 1 Hour", "📅 4 Hour"])
 
     for i, config in enumerate(SCAN_CONFIGS):
@@ -354,12 +364,10 @@ else:
                 
                 with st.spinner("Analyzing Market Geometry..."):
                     try:
-                        # Batch Download
                         data = yf.download(ALL_TICKERS, period=config['period'], interval=config['interval'], group_by='ticker', progress=False, threads=True)
                         
-                        cols = st.columns(3)
-                        c_idx = 0
-                        found = False
+                        online_matches = []
+                        offline_matches = []
                         
                         for ticker in ALL_TICKERS:
                             try:
@@ -370,17 +378,38 @@ else:
 
                                 match = analyze_ticker(df)
                                 if match:
-                                    found = True
-                                    with cols[c_idx % 3]:
-                                        # Visual Card
-                                        st.success(f"**{ticker}** | Coil: {match['coil_width']*100:.2f}%")
-                                        # Pass the label to fix X-Axis
-                                        fig = plot_triangle_clean(df, ticker, match, config['label'])
-                                        st.plotly_chart(fig, use_container_width=True)
-                                        c_idx += 1
+                                    fig = plot_triangle_clean(df, ticker, match, config['label'])
+                                    item = {"ticker": ticker, "data": match, "fig": fig}
+                                    
+                                    if match['is_online']:
+                                        online_matches.append(item)
+                                    else:
+                                        offline_matches.append(item)
                             except: continue
+
+                        # --- LIVE MARKETS ---
+                        st.markdown("### 🟢 Online Markets (Actionable Now)")
+                        if online_matches:
+                            cols = st.columns(3)
+                            for idx, item in enumerate(online_matches):
+                                with cols[idx % 3]:
+                                    st.success(f"**{item['ticker']}** | Live @ {item['data']['last_time']}")
+                                    st.plotly_chart(item['fig'], use_container_width=True)
+                        else:
+                            st.info("No patterns found in currently open markets.")
                         
-                        if not found: st.info("No tight patterns found in this timeframe.")
+                        st.divider()
+
+                        # --- OFFLINE MARKETS ---
+                        with st.expander(f"🔴 Offline Markets (Watchlist for Later) - Found {len(offline_matches)}"):
+                            if offline_matches:
+                                cols = st.columns(3)
+                                for idx, item in enumerate(offline_matches):
+                                    with cols[idx % 3]:
+                                        st.warning(f"**{item['ticker']}** | Closed @ {item['data']['last_time']}")
+                                        st.plotly_chart(item['fig'], use_container_width=True)
+                            else:
+                                st.caption("No patterns found in closed markets.")
                             
                     except Exception as e:
                         st.error(f"Data Error: {e}")
