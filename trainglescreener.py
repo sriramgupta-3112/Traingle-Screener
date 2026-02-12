@@ -22,25 +22,85 @@ TELEGRAM_CHAT_ID = "YOUR_CHAT_ID_HERE"
 ENABLE_TELEGRAM = False 
 
 # ASSET LISTS
-NIFTY_50 = [
-    'RELIANCE.NS', 'TCS.NS', 'HDFCBANK.NS', 'ICICIBANK.NS', 'BHARTIARTL.NS', 'SBIN.NS', 
-    'INFY.NS', 'ITC.NS', 'HINDUNILVR.NS', 'LT.NS', 'BAJFINANCE.NS', 'MARUTI.NS', 
-    'HCLTECH.NS', 'SUNPHARMA.NS', 'TITAN.NS', 'ADANIENT.NS', 'TATASTEEL.NS', 
-    'KOTAKBANK.NS', 'NTPC.NS', 'AXISBANK.NS', 'POWERGRID.NS', 'M&M.NS', 
-    'ULTRACEMCO.NS', 'ONGC.NS', 'COALINDIA.NS', 'WIPRO.NS', 'BAJAJFINSV.NS', 
-    'NESTLEIND.NS', 'ADANIPORTS.NS', 'JSWSTEEL.NS', 'GRASIM.NS', 'CIPLA.NS', 
-    'HINDALCO.NS', 'DRREDDY.NS', 'EICHERMOT.NS', 'TECHM.NS', 'SBILIFE.NS', 
-    'BRITANNIA.NS', 'BPCL.NS', 'HEROMOTOCO.NS', 'DIVISLAB.NS', 'TATACONSUM.NS', 
-    'APOLLOHOSP.NS', 'BAJAJ-AUTO.NS', 'LTIM.NS', 'INDUSINDBK.NS'
+# ==========================================
+# LIQUID NSE F&O STOCKS (HIGH OPTION VOLUME)
+# ==========================================
+
+LIQUID_FNO = [
+    # --- BANKING & FINANCE (The Most Liquid) ---
+    'HDFCBANK.NS', 'ICICIBANK.NS', 'SBIN.NS', 'AXISBANK.NS', 'KOTAKBANK.NS', 
+    'INDUSINDBK.NS', 'BANKBARODA.NS', 'PNB.NS', 'CANBK.NS', 'AUBANK.NS', 
+    'IDFCFIRSTB.NS', 'BAJFINANCE.NS', 'BAJAJFINSV.NS', 'CHOLAFIN.NS', 
+    'SHRIRAMFIN.NS', 'RECLTD.NS', 'PFC.NS', 'SBICARD.NS', 'MUTHOOTFIN.NS',
+
+    # --- IT & TECH ---
+    'TCS.NS', 'INFY.NS', 'HCLTECH.NS', 'WIPRO.NS', 'TECHM.NS', 'LTIM.NS', 
+    'COFORGE.NS', 'PERSISTENT.NS', 'MPHASIS.NS',
+
+    # --- AUTO & ANCILLARY ---
+    'TATAMOTORS.NS', 'MARUTI.NS', 'M&M.NS', 'BAJAJ-AUTO.NS', 'EICHERMOT.NS', 
+    'HEROMOTOCO.NS', 'TVSMOTOR.NS', 'ASHOKLEY.NS', 'BHARATFORG.NS', 
+    'MOTHERSON.NS',
+
+    # --- ENERGY, OIL & POWER ---
+    'RELIANCE.NS', 'ONGC.NS', 'NTPC.NS', 'POWERGRID.NS', 'COALINDIA.NS', 
+    'BPCL.NS', 'IOC.NS', 'TATAPOWER.NS', 'ADANIGREEN.NS', 'ADANIENT.NS', 
+    'ADANIPORTS.NS', 'GAIL.NS',
+
+    # --- METALS & MINING ---
+    'TATASTEEL.NS', 'JSWSTEEL.NS', 'HINDALCO.NS', 'VEDL.NS', 'NMDC.NS', 
+    'SAIL.NS', 'JINDALSTEL.NS', 'NATIONALUM.NS',
+
+    # --- CONSUMER, PHARMA & REALTY ---
+    'ITC.NS', 'HINDUNILVR.NS', 'TITAN.NS', 'ASIANPAINT.NS', 'NESTLEIND.NS', 
+    'BRITANNIA.NS', 'GODREJCP.NS', 'TATACONSUM.NS', 'DABUR.NS', 'SUNPHARMA.NS', 
+    'CIPLA.NS', 'DRREDDY.NS', 'DIVISLAB.NS', 'APOLLOHOSP.NS', 'LUPIN.NS', 
+    'DLF.NS', 'GODREJPROP.NS',
+
+    # --- HIGH MOMENTUM / DEFENCE / PSU (Retail Favorites) ---
+    'HAL.NS', 'BEL.NS', 'MAZDOCK.NS', 'BHEL.NS', 'ZOMATO.NS', 'TRENT.NS', 
+    'IRCTC.NS', 'INDIGO.NS', 'JIOFIN.NS', 'ABBOTINDIA.NS', 'SIEMENS.NS', 
+    'ABB.NS', 'POLYCAB.NS', 'HAVELLS.NS', 'VOLTAS.NS'
 ]
 METALS = ['GC=F', 'SI=F', 'HG=F', 'PL=F', 'PA=F', 'AA', 'FCX', 'SCCO']
-SP_TOP_50 = [
-    'AAPL', 'MSFT', 'NVDA', 'AMZN', 'GOOG', 'META', 'TSLA', 'BRK-B', 'LLY', 'AVGO', 
-    'JPM', 'V', 'UNH', 'XOM', 'MA', 'JNJ', 'HD', 'PG', 'COST', 'ABBV', 'MRK', 
-    'CRM', 'AMD', 'CVX', 'NFLX', 'WMT', 'ACN', 'BAC', 'PEP', 'KO', 'DIS', 'CSCO'
-]
-ALL_TICKERS = NIFTY_50 + METALS + SP_TOP_50
+SP_LIQUID_FNO = [
+    # --- THE MAGNIFICENT SEVEN (Highest Volume) ---
+    'AAPL', 'MSFT', 'NVDA', 'AMZN', 'GOOGL', 'META', 'TSLA',
 
+    # --- SEMICONDUCTORS & AI (High Beta/Volatility) ---
+    'AMD', 'AVGO', 'QCOM', 'INTC', 'MU', 'TXN', 'AMAT', 'LRCX', 'ADI', 
+    'SMCI', 'ARM', 'TSM',
+
+    # --- BANKING & FINANCE ---
+    'JPM', 'BAC', 'WFC', 'C', 'GS', 'MS', 'V', 'MA', 'AXP', 'BLK', 
+    'PYPL', 'COIN', 'HOOD', # (COIN/HOOD are high beta fintechs)
+
+    # --- SOFTWARE, CLOUD & CYBERSECURITY ---
+    'CRM', 'ADBE', 'ORCL', 'IBM', 'NOW', 'PANW', 'PLTR', 'SNOW', 'CRWD', 
+    'SQ', 'SHOP', 'UBER', 'ABNB',
+
+    # --- MEDIA, STREAMING & TELECOM ---
+    'NFLX', 'DIS', 'CMCSA', 'TMUS', 'VZ', 'T',
+
+    # --- RETAIL & CONSUMER DISCRETIONARY ---
+    'WMT', 'COST', 'TGT', 'HD', 'LOW', 'NKE', 'SBUX', 'MCD', 'LULU', 
+    'CMG', 'BKNG', 'MAR',
+
+    # --- PHARMA & HEALTHCARE ---
+    'LLY', 'UNH', 'JNJ', 'PFE', 'MRK', 'ABBV', 'BMY', 'AMGN', 'GILD', 
+    'ISRG', 'CVS',
+
+    # --- ENERGY, INDUSTRIAL & AEROSPACE ---
+    'XOM', 'CVX', 'COP', 'SLB', 'OXY', 'GE', 'CAT', 'BA', 'LMT', 'RTX', 
+    'HON', 'UPS', 'UNP', 'DE',
+
+    # --- CONSUMER STAPLES ---
+    'KO', 'PEP', 'PG', 'PM', 'MO', 'CL',
+
+    # --- MAJOR ETFs (Optional - Often best for triangles) ---
+    # 'SPY', 'QQQ', 'IWM', 'GLD', 'SLV', 'TLT', 'XLF', 'XLE' 
+]
+ALL_TICKERS = LIQUID_FNO + METALS + SP_LIQUID_FNO
 SCAN_CONFIGS = [
     {"label": "5m",  "interval": "5m",  "period": "5d",   "resample": None},
     {"label": "15m", "interval": "15m", "period": "15d",  "resample": None},
@@ -319,4 +379,5 @@ else:
                             
                     except Exception as e:
                         st.error(f"Data Error: {e}")
+
 
