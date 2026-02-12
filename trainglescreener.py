@@ -14,7 +14,7 @@ import schedule
 # ==========================================
 
 # 🔐 SECURITY SETTINGS
-APP_PASSWORD = "trading-god-mode"  # <--- CHANGE THIS PASSWORD
+APP_PASSWORD = "JaiBabaKi"  # <--- CHANGE THIS PASSWORD
 
 # 📱 TELEGRAM SETTINGS
 TELEGRAM_BOT_TOKEN = "YOUR_BOT_TOKEN_HERE" 
@@ -319,3 +319,4 @@ else:
                             
                     except Exception as e:
                         st.error(f"Data Error: {e}")
+
