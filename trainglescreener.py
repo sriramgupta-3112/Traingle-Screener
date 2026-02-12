@@ -16,91 +16,39 @@ import schedule
 # 🔐 SECURITY SETTINGS
 APP_PASSWORD = "JaiBabaKi"  # <--- CHANGE THIS PASSWORD
 
-# 📱 TELEGRAM SETTINGS
+# 📱 TELEGRAM SETTINGS (Optional)
+# 1. Search "@BotFather" -> /newbot -> Get Token
+# 2. Search "@userinfobot" -> Get ID
 TELEGRAM_BOT_TOKEN = "YOUR_BOT_TOKEN_HERE" 
 TELEGRAM_CHAT_ID = "YOUR_CHAT_ID_HERE"
-ENABLE_TELEGRAM = False 
+ENABLE_TELEGRAM = False  # Set to True to enable alerts
 
-# ASSET LISTS
-# ==========================================
-# LIQUID NSE F&O STOCKS (HIGH OPTION VOLUME)
-# ==========================================
+# --- LIQUID ASSET LISTS ---
 
+# 1. NIFTY F&O (High Liquidity)
 LIQUID_FNO = [
-    # --- BANKING & FINANCE (The Most Liquid) ---
     'HDFCBANK.NS', 'ICICIBANK.NS', 'SBIN.NS', 'AXISBANK.NS', 'KOTAKBANK.NS', 
-    'INDUSINDBK.NS', 'BANKBARODA.NS', 'PNB.NS', 'CANBK.NS', 'AUBANK.NS', 
-    'IDFCFIRSTB.NS', 'BAJFINANCE.NS', 'BAJAJFINSV.NS', 'CHOLAFIN.NS', 
-    'SHRIRAMFIN.NS', 'RECLTD.NS', 'PFC.NS', 'SBICARD.NS', 'MUTHOOTFIN.NS',
-
-    # --- IT & TECH ---
-    'TCS.NS', 'INFY.NS', 'HCLTECH.NS', 'WIPRO.NS', 'TECHM.NS', 'LTIM.NS', 
-    'COFORGE.NS', 'PERSISTENT.NS', 'MPHASIS.NS',
-
-    # --- AUTO & ANCILLARY ---
-    'TATAMOTORS.NS', 'MARUTI.NS', 'M&M.NS', 'BAJAJ-AUTO.NS', 'EICHERMOT.NS', 
-    'HEROMOTOCO.NS', 'TVSMOTOR.NS', 'ASHOKLEY.NS', 'BHARATFORG.NS', 
-    'MOTHERSON.NS',
-
-    # --- ENERGY, OIL & POWER ---
-    'RELIANCE.NS', 'ONGC.NS', 'NTPC.NS', 'POWERGRID.NS', 'COALINDIA.NS', 
-    'BPCL.NS', 'IOC.NS', 'TATAPOWER.NS', 'ADANIGREEN.NS', 'ADANIENT.NS', 
-    'ADANIPORTS.NS', 'GAIL.NS',
-
-    # --- METALS & MINING ---
-    'TATASTEEL.NS', 'JSWSTEEL.NS', 'HINDALCO.NS', 'VEDL.NS', 'NMDC.NS', 
-    'SAIL.NS', 'JINDALSTEL.NS', 'NATIONALUM.NS',
-
-    # --- CONSUMER, PHARMA & REALTY ---
-    'ITC.NS', 'HINDUNILVR.NS', 'TITAN.NS', 'ASIANPAINT.NS', 'NESTLEIND.NS', 
-    'BRITANNIA.NS', 'GODREJCP.NS', 'TATACONSUM.NS', 'DABUR.NS', 'SUNPHARMA.NS', 
-    'CIPLA.NS', 'DRREDDY.NS', 'DIVISLAB.NS', 'APOLLOHOSP.NS', 'LUPIN.NS', 
-    'DLF.NS', 'GODREJPROP.NS',
-
-    # --- HIGH MOMENTUM / DEFENCE / PSU (Retail Favorites) ---
-    'HAL.NS', 'BEL.NS', 'MAZDOCK.NS', 'BHEL.NS', 'ZOMATO.NS', 'TRENT.NS', 
-    'IRCTC.NS', 'INDIGO.NS', 'JIOFIN.NS', 'ABBOTINDIA.NS', 'SIEMENS.NS', 
-    'ABB.NS', 'POLYCAB.NS', 'HAVELLS.NS', 'VOLTAS.NS'
+    'INDUSINDBK.NS', 'BAJFINANCE.NS', 'BAJAJFINSV.NS', 'RELIANCE.NS', 'TCS.NS', 
+    'INFY.NS', 'HCLTECH.NS', 'WIPRO.NS', 'TATAMOTORS.NS', 'MARUTI.NS', 'M&M.NS', 
+    'EICHERMOT.NS', 'ONGC.NS', 'NTPC.NS', 'POWERGRID.NS', 'COALINDIA.NS', 'BPCL.NS', 
+    'ADANIENT.NS', 'ADANIPORTS.NS', 'TATASTEEL.NS', 'JSWSTEEL.NS', 'HINDALCO.NS', 
+    'ITC.NS', 'HINDUNILVR.NS', 'TITAN.NS', 'SUNPHARMA.NS', 'CIPLA.NS', 'DRREDDY.NS', 
+    'HAL.NS', 'BEL.NS', 'ZOMATO.NS', 'TRENT.NS', 'DLF.NS', 'INDIGO.NS', 'JIOFIN.NS'
 ]
+
+# 2. GLOBAL METALS
 METALS = ['GC=F', 'SI=F', 'HG=F', 'PL=F', 'PA=F', 'AA', 'FCX', 'SCCO']
+
+# 3. S&P 500 (Top Liquid)
 SP_LIQUID_FNO = [
-    # --- THE MAGNIFICENT SEVEN (Highest Volume) ---
-    'AAPL', 'MSFT', 'NVDA', 'AMZN', 'GOOGL', 'META', 'TSLA',
-
-    # --- SEMICONDUCTORS & AI (High Beta/Volatility) ---
-    'AMD', 'AVGO', 'QCOM', 'INTC', 'MU', 'TXN', 'AMAT', 'LRCX', 'ADI', 
-    'SMCI', 'ARM', 'TSM',
-
-    # --- BANKING & FINANCE ---
-    'JPM', 'BAC', 'WFC', 'C', 'GS', 'MS', 'V', 'MA', 'AXP', 'BLK', 
-    'PYPL', 'COIN', 'HOOD', # (COIN/HOOD are high beta fintechs)
-
-    # --- SOFTWARE, CLOUD & CYBERSECURITY ---
-    'CRM', 'ADBE', 'ORCL', 'IBM', 'NOW', 'PANW', 'PLTR', 'SNOW', 'CRWD', 
-    'SQ', 'SHOP', 'UBER', 'ABNB',
-
-    # --- MEDIA, STREAMING & TELECOM ---
-    'NFLX', 'DIS', 'CMCSA', 'TMUS', 'VZ', 'T',
-
-    # --- RETAIL & CONSUMER DISCRETIONARY ---
-    'WMT', 'COST', 'TGT', 'HD', 'LOW', 'NKE', 'SBUX', 'MCD', 'LULU', 
-    'CMG', 'BKNG', 'MAR',
-
-    # --- PHARMA & HEALTHCARE ---
-    'LLY', 'UNH', 'JNJ', 'PFE', 'MRK', 'ABBV', 'BMY', 'AMGN', 'GILD', 
-    'ISRG', 'CVS',
-
-    # --- ENERGY, INDUSTRIAL & AEROSPACE ---
-    'XOM', 'CVX', 'COP', 'SLB', 'OXY', 'GE', 'CAT', 'BA', 'LMT', 'RTX', 
-    'HON', 'UPS', 'UNP', 'DE',
-
-    # --- CONSUMER STAPLES ---
-    'KO', 'PEP', 'PG', 'PM', 'MO', 'CL',
-
-    # --- MAJOR ETFs (Optional - Often best for triangles) ---
-    # 'SPY', 'QQQ', 'IWM', 'GLD', 'SLV', 'TLT', 'XLF', 'XLE' 
+    'AAPL', 'MSFT', 'NVDA', 'AMZN', 'GOOGL', 'META', 'TSLA', 'AMD', 'AVGO', 
+    'QCOM', 'INTC', 'JPM', 'BAC', 'GS', 'MS', 'V', 'MA', 'CRM', 'ADBE', 
+    'NFLX', 'DIS', 'WMT', 'COST', 'HD', 'LLY', 'UNH', 'XOM', 'CVX', 'BA', 'CAT'
 ]
+
 ALL_TICKERS = LIQUID_FNO + METALS + SP_LIQUID_FNO
+
+# SCAN CONFIGURATION
 SCAN_CONFIGS = [
     {"label": "5m",  "interval": "5m",  "period": "5d",   "resample": None},
     {"label": "15m", "interval": "15m", "period": "15d",  "resample": None},
@@ -109,10 +57,11 @@ SCAN_CONFIGS = [
 ]
 
 # ==========================================
-# 2. CORE LOGIC
+# 2. CORE PATTERN LOGIC
 # ==========================================
 
 def get_pivots(series, order=8):
+    """ Finds significant Highs and Lows """
     values = series.values
     if len(values) == 0: return [], []
     high_idx = argrelextrema(values, np.greater, order=order)[0]
@@ -120,6 +69,7 @@ def get_pivots(series, order=8):
     return high_idx, low_idx
 
 def check_line_integrity(series, idx_start, idx_end, slope, intercept, mode="upper"):
+    """ Ensures price does not cut through the trendline """
     if idx_end <= idx_start: return False
     x_range = np.arange(idx_start, idx_end + 1)
     line_values = slope * x_range + intercept
@@ -133,24 +83,75 @@ def check_line_integrity(series, idx_start, idx_end, slope, intercept, mode="upp
     
     return not np.any(violations)
 
+def analyze_ticker(df):
+    """ Main Pattern Recognition Function """
+    if len(df) < 50: return None
+    
+    # 1. Find Pivots
+    high_idxs, low_idxs = get_pivots(df['High'], order=8)
+    if len(high_idxs) < 2 or len(low_idxs) < 2: return None
+
+    # 2. Get Last 2 Major Swings
+    Ax, Cx = high_idxs[-2], high_idxs[-1]
+    Ay, Cy = df['High'].iloc[Ax], df['High'].iloc[Cx]
+    Bx, Dx = low_idxs[-2], low_idxs[-1]
+    By, Dy = df['Low'].iloc[Bx], df['Low'].iloc[Dx]
+
+    # 3. Geometry Check (Triangle Shape)
+    if not (Ay > Cy and By < Dy): return None
+
+    # 4. Math (Slopes)
+    slope_upper = (Cy - Ay) / (Cx - Ax)
+    intercept_upper = Ay - (slope_upper * Ax)
+    slope_lower = (Dy - By) / (Dx - Bx)
+    intercept_lower = By - (slope_lower * Bx)
+
+    # 5. Integrity Check (No Cuts)
+    if not check_line_integrity(df['High'], Ax, Cx, slope_upper, intercept_upper, "upper"): return None
+    if not check_line_integrity(df['Low'], Bx, Dx, slope_lower, intercept_lower, "lower"): return None
+
+    # 6. Projection (The "E" Leg)
+    current_idx = len(df) - 1
+    proj_upper = (slope_upper * current_idx) + intercept_upper
+    proj_lower = (slope_lower * current_idx) + intercept_lower
+    current_price = df['Close'].iloc[-1]
+    
+    # Price must be INSIDE the triangle
+    if not (proj_lower < current_price < proj_upper): return None
+    
+    # Triangle must be TIGHT (Coiling)
+    width_pct = (proj_upper - proj_lower) / current_price
+    
+    if width_pct < 0.035: # < 3.5% Range
+        return {
+            "pivots": {"Ax": Ax, "Ay": Ay, "Cx": Cx, "Cy": Cy, "Bx": Bx, "By": By, "Dx": Dx, "Dy": Dy},
+            "slopes": {"upper": slope_upper, "lower": slope_lower},
+            "intercepts": {"upper": intercept_upper, "lower": intercept_lower},
+            "coil_width": width_pct,
+            "price": current_price
+        }
+    return None
+
+def resample_data(df, interval):
+    """ Resamples 1h data to 4h """
+    logic = {'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last', 'Volume': 'sum'}
+    return df.resample(interval).agg(logic).dropna()
+
+# ==========================================
+# 3. PRO CHARTING (2X ZOOM)
+# ==========================================
+
 def plot_triangle_clean(df, ticker, data_dict, interval_label):
-    # --- 1. ZOOM LOGIC (2X CONTEXT) ---
-    
-    # Calculate how long the pattern is (End Index - Start Index)
-    # We use the earliest start point (min of Ax or Bx)
+    # 1. ZOOM LOGIC (Dynamic 2X Context)
     pattern_start_idx = min(data_dict['pivots']['Ax'], data_dict['pivots']['Bx'])
-    pattern_end_idx = len(df) # Current candle
-    pattern_len = pattern_end_idx - pattern_start_idx
-    
-    # We want to see the pattern PLUS an equal amount of history before it (2X total view)
-    # If pattern is 50 bars long, we show 50 bars of history before it.
-    # We clamp it at 0 to prevent negative index errors.
-    history_buffer = int(pattern_len * 1.5) # 1.5x history + 1x pattern = 2.5x total context (Adjusted for best look)
+    pattern_len = len(df) - pattern_start_idx
+    # Show pattern + 1.5x history before it
+    history_buffer = int(pattern_len * 1.5) 
     start_view_idx = max(0, pattern_start_idx - history_buffer)
     
     df_slice = df.iloc[start_view_idx:].copy()
     
-    # --- 2. X-AXIS FORMATTING ---
+    # 2. FORMAT X-AXIS (Readable Dates)
     if interval_label in ["5m", "15m"]:
         date_format = "%d %H:%M" 
     else:
@@ -158,6 +159,7 @@ def plot_triangle_clean(df, ticker, data_dict, interval_label):
 
     df_slice['date_str'] = df_slice.index.strftime(date_format)
 
+    # 3. CREATE CHART
     fig = go.Figure(data=[go.Candlestick(
         x=df_slice['date_str'], 
         open=df_slice['Open'], high=df_slice['High'],
@@ -165,7 +167,7 @@ def plot_triangle_clean(df, ticker, data_dict, interval_label):
         name=ticker
     )])
 
-    # --- 3. LINE LOGIC ---
+    # 4. DRAW LINES
     x_indices = np.arange(len(df))
     
     # Upper Line
@@ -180,26 +182,20 @@ def plot_triangle_clean(df, ticker, data_dict, interval_label):
     line_start_l = data_dict['pivots']['Bx']
     y_vals_lower = slope_l * x_indices[line_start_l:] + int_l
 
-    # --- 4. CLIPPING LINES TO VIEW ---
+    # Clip lines to view
     def get_slice_dates(start_idx):
-        # We only plot the line if it's within our new zoomed-out view
         eff_start = max(start_idx, start_view_idx)
         return df_slice['date_str'][eff_start - start_view_idx:].tolist()
     
-    # Slice Y-values to match the visible X-axis
-    # We calculate the offset: (View Start - Line Start). If negative, line started after view (take all).
     u_offset = max(0, start_view_idx - line_start_u)
     l_offset = max(0, start_view_idx - line_start_l)
-    
-    y_u_clipped = y_vals_upper[u_offset:]
-    y_l_clipped = y_vals_lower[l_offset:]
 
     fig.add_trace(go.Scatter(
-        x=get_slice_dates(line_start_u), y=y_u_clipped, 
+        x=get_slice_dates(line_start_u), y=y_vals_upper[u_offset:], 
         mode='lines', name='Res', line=dict(color='red', width=2)
     ))
     fig.add_trace(go.Scatter(
-        x=get_slice_dates(line_start_l), y=y_l_clipped, 
+        x=get_slice_dates(line_start_l), y=y_vals_lower[l_offset:], 
         mode='lines', name='Sup', line=dict(color='green', width=2)
     ))
 
@@ -207,87 +203,9 @@ def plot_triangle_clean(df, ticker, data_dict, interval_label):
         title=f"{ticker} (Coil: {data_dict['coil_width']*100:.2f}%)",
         xaxis_rangeslider_visible=False,
         xaxis_type='category', 
-        height=450, # Increased height slightly for better visibility
-        margin=dict(l=10, r=10, t=30, b=10),
+        height=450,
+        margin=dict(l=10, r=10, t=40, b=10),
         xaxis=dict(tickangle=-45, nticks=15) 
-    )
-    return fig
-    
-def resample_data(df, interval):
-    logic = {'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last', 'Volume': 'sum'}
-    return df.resample(interval).agg(logic).dropna()
-
-# ==========================================
-# 3. ADVANCED CHARTING
-# ==========================================
-
-def plot_triangle_clean(df, ticker, data_dict, interval_label):
-    # 1. Zoom Logic: Show pattern start minus 20 bars context
-    start_view_idx = max(0, min(data_dict['pivots']['Ax'], data_dict['pivots']['Bx']) - 25)
-    df_slice = df.iloc[start_view_idx:].copy()
-    
-    # 2. X-Axis Formatting
-    # For 5m/15m charts, we want "Day Hour:Minute" (e.g., "12 14:30")
-    # For 1h/4h charts, we want "Month Day" (e.g., "Feb 12")
-    if interval_label in ["5m", "15m"]:
-        date_format = "%d %H:%M" # Day + Time
-    else:
-        date_format = "%b %d"    # Month + Day
-
-    # Convert index to string for "Category" mode (removes gaps)
-    df_slice['date_str'] = df_slice.index.strftime(date_format)
-
-    fig = go.Figure(data=[go.Candlestick(
-        x=df_slice['date_str'], 
-        open=df_slice['Open'], high=df_slice['High'],
-        low=df_slice['Low'], close=df_slice['Close'], 
-        name=ticker
-    )])
-
-    # 3. Line Logic
-    x_indices = np.arange(len(df))
-    
-    # Upper Line
-    slope_u = data_dict['slopes']['upper']
-    int_u = data_dict['intercepts']['upper']
-    line_start_u = data_dict['pivots']['Ax']
-    y_vals_upper = slope_u * x_indices[line_start_u:] + int_u
-    
-    # Lower Line
-    slope_l = data_dict['slopes']['lower']
-    int_l = data_dict['intercepts']['lower']
-    line_start_l = data_dict['pivots']['Bx']
-    y_vals_lower = slope_l * x_indices[line_start_l:] + int_l
-
-    # Map indices to the sliced string dates
-    # We must offset the indices by 'start_view_idx' to align with the new sliced X-axis
-    def get_slice_dates(start_idx):
-        # The line starts at absolute index 'start_idx'
-        # If start_idx is BEFORE our zoom view, we clip it
-        eff_start = max(start_idx, start_view_idx)
-        # Get the corresponding dates from the slice
-        return df_slice['date_str'][eff_start - start_view_idx:].tolist()
-    
-    # Get Y-values corresponding to the clipped range
-    y_u_clipped = y_vals_upper[max(0, start_view_idx - line_start_u):]
-    y_l_clipped = y_vals_lower[max(0, start_view_idx - line_start_l):]
-
-    fig.add_trace(go.Scatter(
-        x=get_slice_dates(line_start_u), y=y_u_clipped, 
-        mode='lines', name='Res', line=dict(color='red', width=2)
-    ))
-    fig.add_trace(go.Scatter(
-        x=get_slice_dates(line_start_l), y=y_l_clipped, 
-        mode='lines', name='Sup', line=dict(color='green', width=2)
-    ))
-
-    fig.update_layout(
-        title=f"{ticker} (Coil: {data_dict['coil_width']*100:.2f}%)",
-        xaxis_rangeslider_visible=False,
-        xaxis_type='category', 
-        height=350,
-        margin=dict(l=10, r=10, t=30, b=10),
-        xaxis=dict(tickangle=-45, nticks=10) # Angled labels for readability
     )
     return fig
 
@@ -299,7 +217,7 @@ def send_telegram_alert(message):
     except: pass
 
 # ==========================================
-# 4. BACKGROUND WORKER
+# 4. BACKGROUND AUTOMATION
 # ==========================================
 
 @st.cache_resource
@@ -343,56 +261,54 @@ scanner = BackgroundScanner()
 scanner.start()
 
 # ==========================================
-# 5. UI & AUTHENTICATION (FIXED)
+# 5. STREAMLIT UI (SECURE)
 # ==========================================
 
 st.set_page_config(page_title="Triangle Pro", layout="wide")
 
-# Initialize Session State
+# Initialize Session
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 
-# --- LOGIN SCREEN (FIXED) ---
+# --- LOGIN FORM (FIXED) ---
 if not st.session_state.authenticated:
-    st.title("🔒 Restricted Access")
-    st.markdown("Please enter the secure access code below.")
-    
-    # Using a FORM prevents the "disappearing input" glitch
-    with st.form("login_form"):
-        password = st.text_input("Access Code", type="password")
-        submit = st.form_submit_button("Unlock Dashboard")
-        
-        if submit:
-            if password == APP_PASSWORD:
-                st.session_state.authenticated = True
-                st.rerun() # Force reload to show the main app
-            else:
-                st.error("❌ Incorrect Password")
+    col1, col2, col3 = st.columns([1,2,1])
+    with col2:
+        st.title("🔒 Triangle Hunter Pro")
+        with st.form("login_form"):
+            password = st.text_input("Enter Access Code", type="password")
+            submit = st.form_submit_button("Unlock Dashboard", type="primary")
+            
+            if submit:
+                if password == APP_PASSWORD:
+                    st.session_state.authenticated = True
+                    st.rerun()
+                else:
+                    st.error("❌ Incorrect Access Code")
 
 else:
     # --- MAIN DASHBOARD ---
     st.title("🔻 Triangle Hunter Pro")
     
-    # Control Bar
-    col1, col2 = st.columns([3, 1])
+    # Status Bar
+    col1, col2 = st.columns([4, 1])
     with col1:
-        st.caption(f"Status: System Active | Monitoring {len(ALL_TICKERS)} Assets")
+        st.caption(f"✅ System Active | Monitoring {len(ALL_TICKERS)} Liquid Assets")
     with col2:
         if st.button("🚪 Logout"):
             st.session_state.authenticated = False
             st.rerun()
 
     # Timeframe Tabs
-    tabs = st.tabs(["5 Min", "15 Min", "1 Hour", "4 Hour"])
+    tabs = st.tabs(["⚡ 5 Min", "⏱️ 15 Min", "hourly 1 Hour", "📅 4 Hour"])
 
     for i, config in enumerate(SCAN_CONFIGS):
         with tabs[i]:
-            if st.button(f"🔎 Scan {config['label']} Market", key=f"btn_{i}"):
-                
-                results_container = st.container()
+            if st.button(f"Start {config['label']} Scan", key=f"btn_{i}", type="primary"):
                 
                 with st.spinner("Analyzing Market Geometry..."):
                     try:
+                        # Batch Download
                         data = yf.download(ALL_TICKERS, period=config['period'], interval=config['interval'], group_by='ticker', progress=False, threads=True)
                         
                         cols = st.columns(3)
@@ -410,16 +326,14 @@ else:
                                 if match:
                                     found = True
                                     with cols[c_idx % 3]:
-                                        # Pass the label (e.g. "5m") to clean up the chart
+                                        # Visual Card
+                                        st.success(f"**{ticker}** | Coil: {match['coil_width']*100:.2f}%")
                                         fig = plot_triangle_clean(df, ticker, match, config['label'])
                                         st.plotly_chart(fig, use_container_width=True)
                                         c_idx += 1
                             except: continue
                         
-                        if not found: st.info("No tight patterns found right now.")
+                        if not found: st.info("No tight patterns found in this timeframe.")
                             
                     except Exception as e:
                         st.error(f"Data Error: {e}")
-
-
-
