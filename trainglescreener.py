@@ -133,45 +133,86 @@ def check_line_integrity(series, idx_start, idx_end, slope, intercept, mode="upp
     
     return not np.any(violations)
 
-def analyze_ticker(df):
-    if len(df) < 50: return None
-    high_idxs, low_idxs = get_pivots(df['High'], order=8)
-    if len(high_idxs) < 2 or len(low_idxs) < 2: return None
-
-    Ax, Cx = high_idxs[-2], high_idxs[-1]
-    Ay, Cy = df['High'].iloc[Ax], df['High'].iloc[Cx]
-    Bx, Dx = low_idxs[-2], low_idxs[-1]
-    By, Dy = df['Low'].iloc[Bx], df['Low'].iloc[Dx]
-
-    if not (Ay > Cy and By < Dy): return None
-
-    slope_upper = (Cy - Ay) / (Cx - Ax)
-    intercept_upper = Ay - (slope_upper * Ax)
-    slope_lower = (Dy - By) / (Dx - Bx)
-    intercept_lower = By - (slope_lower * Bx)
-
-    if not check_line_integrity(df['High'], Ax, Cx, slope_upper, intercept_upper, "upper"): return None
-    if not check_line_integrity(df['Low'], Bx, Dx, slope_lower, intercept_lower, "lower"): return None
-
-    current_idx = len(df) - 1
-    proj_upper = (slope_upper * current_idx) + intercept_upper
-    proj_lower = (slope_lower * current_idx) + intercept_lower
-    current_price = df['Close'].iloc[-1]
+def plot_triangle_clean(df, ticker, data_dict, interval_label):
+    # --- 1. ZOOM LOGIC (2X CONTEXT) ---
     
-    if not (proj_lower < current_price < proj_upper): return None
+    # Calculate how long the pattern is (End Index - Start Index)
+    # We use the earliest start point (min of Ax or Bx)
+    pattern_start_idx = min(data_dict['pivots']['Ax'], data_dict['pivots']['Bx'])
+    pattern_end_idx = len(df) # Current candle
+    pattern_len = pattern_end_idx - pattern_start_idx
     
-    width_pct = (proj_upper - proj_lower) / current_price
+    # We want to see the pattern PLUS an equal amount of history before it (2X total view)
+    # If pattern is 50 bars long, we show 50 bars of history before it.
+    # We clamp it at 0 to prevent negative index errors.
+    history_buffer = int(pattern_len * 1.5) # 1.5x history + 1x pattern = 2.5x total context (Adjusted for best look)
+    start_view_idx = max(0, pattern_start_idx - history_buffer)
     
-    if width_pct < 0.035:
-        return {
-            "pivots": {"Ax": Ax, "Ay": Ay, "Cx": Cx, "Cy": Cy, "Bx": Bx, "By": By, "Dx": Dx, "Dy": Dy},
-            "slopes": {"upper": slope_upper, "lower": slope_lower},
-            "intercepts": {"upper": intercept_upper, "lower": intercept_lower},
-            "coil_width": width_pct,
-            "price": current_price
-        }
-    return None
+    df_slice = df.iloc[start_view_idx:].copy()
+    
+    # --- 2. X-AXIS FORMATTING ---
+    if interval_label in ["5m", "15m"]:
+        date_format = "%d %H:%M" 
+    else:
+        date_format = "%b %d"    
 
+    df_slice['date_str'] = df_slice.index.strftime(date_format)
+
+    fig = go.Figure(data=[go.Candlestick(
+        x=df_slice['date_str'], 
+        open=df_slice['Open'], high=df_slice['High'],
+        low=df_slice['Low'], close=df_slice['Close'], 
+        name=ticker
+    )])
+
+    # --- 3. LINE LOGIC ---
+    x_indices = np.arange(len(df))
+    
+    # Upper Line
+    slope_u = data_dict['slopes']['upper']
+    int_u = data_dict['intercepts']['upper']
+    line_start_u = data_dict['pivots']['Ax']
+    y_vals_upper = slope_u * x_indices[line_start_u:] + int_u
+    
+    # Lower Line
+    slope_l = data_dict['slopes']['lower']
+    int_l = data_dict['intercepts']['lower']
+    line_start_l = data_dict['pivots']['Bx']
+    y_vals_lower = slope_l * x_indices[line_start_l:] + int_l
+
+    # --- 4. CLIPPING LINES TO VIEW ---
+    def get_slice_dates(start_idx):
+        # We only plot the line if it's within our new zoomed-out view
+        eff_start = max(start_idx, start_view_idx)
+        return df_slice['date_str'][eff_start - start_view_idx:].tolist()
+    
+    # Slice Y-values to match the visible X-axis
+    # We calculate the offset: (View Start - Line Start). If negative, line started after view (take all).
+    u_offset = max(0, start_view_idx - line_start_u)
+    l_offset = max(0, start_view_idx - line_start_l)
+    
+    y_u_clipped = y_vals_upper[u_offset:]
+    y_l_clipped = y_vals_lower[l_offset:]
+
+    fig.add_trace(go.Scatter(
+        x=get_slice_dates(line_start_u), y=y_u_clipped, 
+        mode='lines', name='Res', line=dict(color='red', width=2)
+    ))
+    fig.add_trace(go.Scatter(
+        x=get_slice_dates(line_start_l), y=y_l_clipped, 
+        mode='lines', name='Sup', line=dict(color='green', width=2)
+    ))
+
+    fig.update_layout(
+        title=f"{ticker} (Coil: {data_dict['coil_width']*100:.2f}%)",
+        xaxis_rangeslider_visible=False,
+        xaxis_type='category', 
+        height=450, # Increased height slightly for better visibility
+        margin=dict(l=10, r=10, t=30, b=10),
+        xaxis=dict(tickangle=-45, nticks=15) 
+    )
+    return fig
+    
 def resample_data(df, interval):
     logic = {'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last', 'Volume': 'sum'}
     return df.resample(interval).agg(logic).dropna()
@@ -379,5 +420,6 @@ else:
                             
                     except Exception as e:
                         st.error(f"Data Error: {e}")
+
 
 
