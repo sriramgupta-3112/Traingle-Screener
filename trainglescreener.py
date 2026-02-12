@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 # ==========================================
 
 # 🔐 SECURITY SETTINGS
-APP_PASSWORD = "trading-god-mode" 
+APP_PASSWORD = "JaiBabaKi" 
 
 # 📱 TELEGRAM SETTINGS
 TELEGRAM_BOT_TOKEN = "YOUR_BOT_TOKEN_HERE" 
@@ -413,3 +413,4 @@ else:
                             
                     except Exception as e:
                         st.error(f"Data Error: {e}")
+
