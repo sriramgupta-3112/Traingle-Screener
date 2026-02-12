@@ -16,12 +16,10 @@ import schedule
 # 🔐 SECURITY SETTINGS
 APP_PASSWORD = "trading-god-mode"  # <--- CHANGE THIS PASSWORD
 
-# 📱 TELEGRAM NOTIFICATION SETTINGS (Optional)
-# 1. Search for "@BotFather" on Telegram -> /newbot -> Get Token
-# 2. Search for "@userinfobot" -> Get your numeric ID
+# 📱 TELEGRAM SETTINGS
 TELEGRAM_BOT_TOKEN = "YOUR_BOT_TOKEN_HERE" 
 TELEGRAM_CHAT_ID = "YOUR_CHAT_ID_HERE"
-ENABLE_TELEGRAM = False  # Set to True after filling above
+ENABLE_TELEGRAM = False 
 
 # ASSET LISTS
 NIFTY_50 = [
@@ -51,7 +49,7 @@ SCAN_CONFIGS = [
 ]
 
 # ==========================================
-# 2. CORE PATTERN LOGIC
+# 2. CORE LOGIC
 # ==========================================
 
 def get_pivots(series, order=8):
@@ -66,7 +64,7 @@ def check_line_integrity(series, idx_start, idx_end, slope, intercept, mode="upp
     x_range = np.arange(idx_start, idx_end + 1)
     line_values = slope * x_range + intercept
     actual_values = series.iloc[idx_start : idx_end + 1].values
-    tolerance = 0.003 # Increased slightly to forgive tiny wicks
+    tolerance = 0.003 
     
     if mode == "upper":
         violations = actual_values > (line_values * (1 + tolerance))
@@ -119,35 +117,39 @@ def resample_data(df, interval):
     return df.resample(interval).agg(logic).dropna()
 
 # ==========================================
-# 3. CHARTING & NOTIFICATIONS
+# 3. ADVANCED CHARTING
 # ==========================================
 
-def plot_triangle_clean(df, ticker, data_dict):
-    """ 
-    FIXED: Uses 'category' axis type to remove overnight gaps 
-    """
-    # Slice the dataframe to show only the relevant history (start of pattern - 20 bars)
-    start_view_idx = max(0, min(data_dict['pivots']['Ax'], data_dict['pivots']['Bx']) - 20)
-    df_slice = df.iloc[start_view_idx:]
+def plot_triangle_clean(df, ticker, data_dict, interval_label):
+    # 1. Zoom Logic: Show pattern start minus 20 bars context
+    start_view_idx = max(0, min(data_dict['pivots']['Ax'], data_dict['pivots']['Bx']) - 25)
+    df_slice = df.iloc[start_view_idx:].copy()
     
-    # We must re-calculate indices for the slice (since index 0 is now start_view_idx)
-    def adj(idx): return idx - start_view_idx
-    
+    # 2. X-Axis Formatting
+    # For 5m/15m charts, we want "Day Hour:Minute" (e.g., "12 14:30")
+    # For 1h/4h charts, we want "Month Day" (e.g., "Feb 12")
+    if interval_label in ["5m", "15m"]:
+        date_format = "%d %H:%M" # Day + Time
+    else:
+        date_format = "%b %d"    # Month + Day
+
+    # Convert index to string for "Category" mode (removes gaps)
+    df_slice['date_str'] = df_slice.index.strftime(date_format)
+
     fig = go.Figure(data=[go.Candlestick(
-        x=df_slice.index.strftime("%Y-%m-%d %H:%M"), # Convert to string for Category axis
+        x=df_slice['date_str'], 
         open=df_slice['Open'], high=df_slice['High'],
         low=df_slice['Low'], close=df_slice['Close'], 
         name=ticker
     )])
 
-    # Generate Line Points
-    x_indices = np.arange(len(df)) # Original indices
+    # 3. Line Logic
+    x_indices = np.arange(len(df))
     
     # Upper Line
     slope_u = data_dict['slopes']['upper']
     int_u = data_dict['intercepts']['upper']
     line_start_u = data_dict['pivots']['Ax']
-    # Calculate Y values for the whole range, then slice
     y_vals_upper = slope_u * x_indices[line_start_u:] + int_u
     
     # Lower Line
@@ -156,23 +158,35 @@ def plot_triangle_clean(df, ticker, data_dict):
     line_start_l = data_dict['pivots']['Bx']
     y_vals_lower = slope_l * x_indices[line_start_l:] + int_l
 
-    # Add Traces (Using formatted date strings for X)
-    # We need to map the integer indices back to the string dates
-    date_map = df.index.strftime("%Y-%m-%d %H:%M").tolist()
+    # Map indices to the sliced string dates
+    # We must offset the indices by 'start_view_idx' to align with the new sliced X-axis
+    def get_slice_dates(start_idx):
+        # The line starts at absolute index 'start_idx'
+        # If start_idx is BEFORE our zoom view, we clip it
+        eff_start = max(start_idx, start_view_idx)
+        # Get the corresponding dates from the slice
+        return df_slice['date_str'][eff_start - start_view_idx:].tolist()
     
-    # Safely get dates for lines
-    x_dates_upper = [date_map[i] for i in range(line_start_u, len(df))]
-    x_dates_lower = [date_map[i] for i in range(line_start_l, len(df))]
+    # Get Y-values corresponding to the clipped range
+    y_u_clipped = y_vals_upper[max(0, start_view_idx - line_start_u):]
+    y_l_clipped = y_vals_lower[max(0, start_view_idx - line_start_l):]
 
-    fig.add_trace(go.Scatter(x=x_dates_upper, y=y_vals_upper, mode='lines', name='Resistance', line=dict(color='red', width=2)))
-    fig.add_trace(go.Scatter(x=x_dates_lower, y=y_vals_lower, mode='lines', name='Support', line=dict(color='green', width=2)))
+    fig.add_trace(go.Scatter(
+        x=get_slice_dates(line_start_u), y=y_u_clipped, 
+        mode='lines', name='Res', line=dict(color='red', width=2)
+    ))
+    fig.add_trace(go.Scatter(
+        x=get_slice_dates(line_start_l), y=y_l_clipped, 
+        mode='lines', name='Sup', line=dict(color='green', width=2)
+    ))
 
     fig.update_layout(
         title=f"{ticker} (Coil: {data_dict['coil_width']*100:.2f}%)",
         xaxis_rangeslider_visible=False,
-        xaxis_type='category', # <--- THIS FIXES THE JUNK CHART ISSUE
-        height=400,
-        margin=dict(l=20, r=20, t=40, b=20)
+        xaxis_type='category', 
+        height=350,
+        margin=dict(l=10, r=10, t=30, b=10),
+        xaxis=dict(tickangle=-45, nticks=10) # Angled labels for readability
     )
     return fig
 
@@ -184,10 +198,9 @@ def send_telegram_alert(message):
     except: pass
 
 # ==========================================
-# 4. BACKGROUND WORKER (AUTO-RUNNER)
+# 4. BACKGROUND WORKER
 # ==========================================
 
-# This class caches the background thread so it survives page reloads
 @st.cache_resource
 class BackgroundScanner:
     def __init__(self):
@@ -195,7 +208,7 @@ class BackgroundScanner:
         self.thread = None
         
     def scan_job(self):
-        print("⏰ Auto-Scan Started...")
+        print("⏰ Auto-Scan Triggered...")
         for config in SCAN_CONFIGS:
             try:
                 data = yf.download(ALL_TICKERS, period=config['period'], interval=config['interval'], group_by='ticker', progress=False, threads=True)
@@ -208,71 +221,76 @@ class BackgroundScanner:
                         
                         match = analyze_ticker(df)
                         if match:
-                            msg = f"🚀 ALERT [{config['label']}]\n{ticker} is Coiling!\nPrice: {match['price']:.2f}\nTightness: {match['coil_width']*100:.1f}%"
+                            msg = f"🚀 {ticker} ({config['label']}) Alert!\nPrice: {match['price']:.2f}\nCoil: {match['coil_width']*100:.1f}%"
                             print(msg)
                             send_telegram_alert(msg)
                     except: continue
             except: continue
-        print("✅ Auto-Scan Finished.")
 
     def start(self):
         if not self.running:
             self.running = True
-            
             def loop():
-                # Run immediately once
-                self.scan_job()
-                # Then schedule every 15 mins
                 schedule.every(15).minutes.do(self.scan_job)
                 while True:
                     schedule.run_pending()
                     time.sleep(1)
-            
             self.thread = threading.Thread(target=loop, daemon=True)
             self.thread.start()
 
-# Start the background scanner
 scanner = BackgroundScanner()
 scanner.start()
 
 # ==========================================
-# 5. STREAMLIT FRONTEND
+# 5. UI & AUTHENTICATION (FIXED)
 # ==========================================
 
 st.set_page_config(page_title="Triangle Pro", layout="wide")
 
-# --- AUTHENTICATION ---
+# Initialize Session State
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 
-def check_password():
-    if st.session_state.password_input == APP_PASSWORD:
-        st.session_state.authenticated = True
-        del st.session_state.password_input # Don't store password
-    else:
-        st.error("❌ Access Denied")
-
+# --- LOGIN SCREEN (FIXED) ---
 if not st.session_state.authenticated:
     st.title("🔒 Restricted Access")
-    st.text_input("Enter Access Code:", type="password", key="password_input", on_change=check_password)
+    st.markdown("Please enter the secure access code below.")
+    
+    # Using a FORM prevents the "disappearing input" glitch
+    with st.form("login_form"):
+        password = st.text_input("Access Code", type="password")
+        submit = st.form_submit_button("Unlock Dashboard")
+        
+        if submit:
+            if password == APP_PASSWORD:
+                st.session_state.authenticated = True
+                st.rerun() # Force reload to show the main app
+            else:
+                st.error("❌ Incorrect Password")
+
 else:
-    # --- MAIN APP INTERFACE ---
+    # --- MAIN DASHBOARD ---
     st.title("🔻 Triangle Hunter Pro")
     
+    # Control Bar
     col1, col2 = st.columns([3, 1])
     with col1:
-        st.markdown(f"**Status:** System Running | Scanned **{len(ALL_TICKERS)}** Assets")
+        st.caption(f"Status: System Active | Monitoring {len(ALL_TICKERS)} Assets")
     with col2:
-        if st.button("🔄 Manual Rescan"):
+        if st.button("🚪 Logout"):
+            st.session_state.authenticated = False
             st.rerun()
 
+    # Timeframe Tabs
     tabs = st.tabs(["5 Min", "15 Min", "1 Hour", "4 Hour"])
 
-    # Loop through tabs and configs
     for i, config in enumerate(SCAN_CONFIGS):
         with tabs[i]:
-            if st.button(f"Scan {config['label']} Market", key=f"btn_{i}"):
-                with st.spinner("Analyzing Charts..."):
+            if st.button(f"🔎 Scan {config['label']} Market", key=f"btn_{i}"):
+                
+                results_container = st.container()
+                
+                with st.spinner("Analyzing Market Geometry..."):
                     try:
                         data = yf.download(ALL_TICKERS, period=config['period'], interval=config['interval'], group_by='ticker', progress=False, threads=True)
                         
@@ -291,12 +309,13 @@ else:
                                 if match:
                                     found = True
                                     with cols[c_idx % 3]:
-                                        fig = plot_triangle_clean(df, ticker, match)
+                                        # Pass the label (e.g. "5m") to clean up the chart
+                                        fig = plot_triangle_clean(df, ticker, match, config['label'])
                                         st.plotly_chart(fig, use_container_width=True)
                                         c_idx += 1
                             except: continue
                         
-                        if not found: st.info("No patterns found right now.")
+                        if not found: st.info("No tight patterns found right now.")
                             
                     except Exception as e:
-                        st.error(f"Error: {e}")
+                        st.error(f"Data Error: {e}")
