@@ -14,7 +14,7 @@ import schedule
 # ==========================================
 
 # 🔐 SECURITY SETTINGS
-APP_PASSWORD = "JaiBabaKi"  # <--- CHANGE THIS PASSWORD
+APP_PASSWORD = "trading-god-mode"  # <--- CHANGE THIS PASSWORD
 
 # 📱 TELEGRAM SETTINGS (Optional)
 # 1. Search "@BotFather" -> /newbot -> Get Token
@@ -23,27 +23,73 @@ TELEGRAM_BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
 TELEGRAM_CHAT_ID = "YOUR_CHAT_ID_HERE"
 ENABLE_TELEGRAM = False  # Set to True to enable alerts
 
-# --- LIQUID ASSET LISTS ---
+# --- 🌍 EXTENDED LIQUID ASSET LISTS ---
 
-# 1. NIFTY F&O (High Liquidity)
+# 1. NIFTY F&O (High Option Volume)
 LIQUID_FNO = [
+    # BANKING & FINANCE
     'HDFCBANK.NS', 'ICICIBANK.NS', 'SBIN.NS', 'AXISBANK.NS', 'KOTAKBANK.NS', 
-    'INDUSINDBK.NS', 'BAJFINANCE.NS', 'BAJAJFINSV.NS', 'RELIANCE.NS', 'TCS.NS', 
-    'INFY.NS', 'HCLTECH.NS', 'WIPRO.NS', 'TATAMOTORS.NS', 'MARUTI.NS', 'M&M.NS', 
-    'EICHERMOT.NS', 'ONGC.NS', 'NTPC.NS', 'POWERGRID.NS', 'COALINDIA.NS', 'BPCL.NS', 
-    'ADANIENT.NS', 'ADANIPORTS.NS', 'TATASTEEL.NS', 'JSWSTEEL.NS', 'HINDALCO.NS', 
-    'ITC.NS', 'HINDUNILVR.NS', 'TITAN.NS', 'SUNPHARMA.NS', 'CIPLA.NS', 'DRREDDY.NS', 
-    'HAL.NS', 'BEL.NS', 'ZOMATO.NS', 'TRENT.NS', 'DLF.NS', 'INDIGO.NS', 'JIOFIN.NS'
+    'INDUSINDBK.NS', 'BANKBARODA.NS', 'PNB.NS', 'CANBK.NS', 'AUBANK.NS', 
+    'IDFCFIRSTB.NS', 'BAJFINANCE.NS', 'BAJAJFINSV.NS', 'CHOLAFIN.NS', 
+    'SHRIRAMFIN.NS', 'RECLTD.NS', 'PFC.NS', 'SBICARD.NS', 'MUTHOOTFIN.NS',
+
+    # IT & TECH
+    'TCS.NS', 'INFY.NS', 'HCLTECH.NS', 'WIPRO.NS', 'TECHM.NS', 'LTIM.NS', 
+    'COFORGE.NS', 'PERSISTENT.NS', 'MPHASIS.NS',
+
+    # AUTO
+    'TATAMOTORS.NS', 'MARUTI.NS', 'M&M.NS', 'BAJAJ-AUTO.NS', 'EICHERMOT.NS', 
+    'HEROMOTOCO.NS', 'TVSMOTOR.NS', 'ASHOKLEY.NS', 'BHARATFORG.NS', 
+
+    # ENERGY & POWER
+    'RELIANCE.NS', 'ONGC.NS', 'NTPC.NS', 'POWERGRID.NS', 'COALINDIA.NS', 
+    'BPCL.NS', 'IOC.NS', 'TATAPOWER.NS', 'ADANIGREEN.NS', 'ADANIENT.NS', 
+    'ADANIPORTS.NS', 'GAIL.NS',
+
+    # METALS
+    'TATASTEEL.NS', 'JSWSTEEL.NS', 'HINDALCO.NS', 'VEDL.NS', 'NMDC.NS', 
+    'SAIL.NS', 'JINDALSTEL.NS', 'NATIONALUM.NS',
+
+    # CONSUMER / PHARMA / REALTY
+    'ITC.NS', 'HINDUNILVR.NS', 'TITAN.NS', 'ASIANPAINT.NS', 'NESTLEIND.NS', 
+    'BRITANNIA.NS', 'GODREJCP.NS', 'TATACONSUM.NS', 'DABUR.NS', 'SUNPHARMA.NS', 
+    'CIPLA.NS', 'DRREDDY.NS', 'DIVISLAB.NS', 'APOLLOHOSP.NS', 'LUPIN.NS', 
+    'DLF.NS', 'GODREJPROP.NS',
+
+    # HIGH BETA / MOMENTUM
+    'HAL.NS', 'BEL.NS', 'MAZDOCK.NS', 'BHEL.NS', 'ZOMATO.NS', 'TRENT.NS', 
+    'IRCTC.NS', 'INDIGO.NS', 'JIOFIN.NS', 'ABBOTINDIA.NS', 'SIEMENS.NS', 
+    'ABB.NS', 'POLYCAB.NS', 'HAVELLS.NS', 'VOLTAS.NS'
 ]
 
-# 2. GLOBAL METALS
+# 2. GLOBAL METALS & COMMODITIES
 METALS = ['GC=F', 'SI=F', 'HG=F', 'PL=F', 'PA=F', 'AA', 'FCX', 'SCCO']
 
-# 3. S&P 500 (Top Liquid)
+# 3. S&P 500 (Liquid Options Only)
 SP_LIQUID_FNO = [
-    'AAPL', 'MSFT', 'NVDA', 'AMZN', 'GOOGL', 'META', 'TSLA', 'AMD', 'AVGO', 
-    'QCOM', 'INTC', 'JPM', 'BAC', 'GS', 'MS', 'V', 'MA', 'CRM', 'ADBE', 
-    'NFLX', 'DIS', 'WMT', 'COST', 'HD', 'LLY', 'UNH', 'XOM', 'CVX', 'BA', 'CAT'
+    # MAGNIFICENT SEVEN
+    'AAPL', 'MSFT', 'NVDA', 'AMZN', 'GOOGL', 'META', 'TSLA',
+
+    # SEMIS & AI
+    'AMD', 'AVGO', 'QCOM', 'INTC', 'MU', 'TXN', 'AMAT', 'LRCX', 'ADI', 
+    'SMCI', 'ARM', 'TSM',
+
+    # FINANCE
+    'JPM', 'BAC', 'WFC', 'C', 'GS', 'MS', 'V', 'MA', 'AXP', 'BLK', 
+    'PYPL', 'COIN', 'HOOD',
+
+    # SOFTWARE / CLOUD
+    'CRM', 'ADBE', 'ORCL', 'IBM', 'NOW', 'PANW', 'PLTR', 'SNOW', 'CRWD', 
+    'SQ', 'SHOP', 'UBER', 'ABNB',
+
+    # MEDIA / RETAIL / PHARMA
+    'NFLX', 'DIS', 'CMCSA', 'TMUS', 'VZ', 'T', 'WMT', 'COST', 'TGT', 'HD', 
+    'LOW', 'NKE', 'SBUX', 'MCD', 'LULU', 'CMG', 'BKNG', 'MAR', 'LLY', 'UNH', 
+    'JNJ', 'PFE', 'MRK', 'ABBV', 'BMY', 'AMGN', 'GILD', 'ISRG', 'CVS',
+
+    # INDUSTRIAL / ENERGY
+    'XOM', 'CVX', 'COP', 'SLB', 'OXY', 'GE', 'CAT', 'BA', 'LMT', 'RTX', 
+    'HON', 'UPS', 'UNP', 'DE', 'KO', 'PEP', 'PG', 'PM', 'MO', 'CL'
 ]
 
 ALL_TICKERS = LIQUID_FNO + METALS + SP_LIQUID_FNO
@@ -270,7 +316,7 @@ st.set_page_config(page_title="Triangle Pro", layout="wide")
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 
-# --- LOGIN FORM (FIXED) ---
+# --- LOGIN FORM ---
 if not st.session_state.authenticated:
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
@@ -328,6 +374,7 @@ else:
                                     with cols[c_idx % 3]:
                                         # Visual Card
                                         st.success(f"**{ticker}** | Coil: {match['coil_width']*100:.2f}%")
+                                        # Pass the label to fix X-Axis
                                         fig = plot_triangle_clean(df, ticker, match, config['label'])
                                         st.plotly_chart(fig, use_container_width=True)
                                         c_idx += 1
