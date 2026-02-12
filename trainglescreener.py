@@ -6,36 +6,95 @@ import plotly.graph_objects as go
 from scipy.signal import argrelextrema
 import time
 import threading
+import requests
 import schedule
-from datetime import datetime, timedelta, timezone
 
 # ==========================================
-# 1. GLOBAL CONFIGURATION
+# 1. CONFIGURATION & SECRETS
 # ==========================================
 
-APP_PASSWORD = "trading-god-mode" 
+# 🔐 SECURITY SETTINGS
+APP_PASSWORD = "JaiBabaKi"  # <--- CHANGE THIS PASSWORD
+
+# 📱 TELEGRAM SETTINGS (Optional)
+# 1. Search "@BotFather" -> /newbot -> Get Token
+# 2. Search "@userinfobot" -> Get ID
 TELEGRAM_BOT_TOKEN = "YOUR_BOT_TOKEN_HERE" 
 TELEGRAM_CHAT_ID = "YOUR_CHAT_ID_HERE"
-ENABLE_TELEGRAM = False 
+ENABLE_TELEGRAM = False  # Set to True to enable alerts
 
-# --- ASSET UNIVERSE ---
-CRYPTO = ['BTC-USD', 'ETH-USD', 'SOL-USD', 'BNB-USD', 'XRP-USD']
-COMMODITIES = ['GC=F', 'SI=F', 'HG=F', 'PL=F', 'PA=F', 'CL=F', 'NG=F', 'BZ=F']
+# --- 🌍 EXTENDED LIQUID ASSET LISTS ---
+
+# 1. NIFTY F&O (High Option Volume)
 LIQUID_FNO = [
-    'HDFCBANK.NS', 'ICICIBANK.NS', 'SBIN.NS', 'AXISBANK.NS', 'KOTAKBANK.NS', 'INDUSINDBK.NS', 
-    'RELIANCE.NS', 'TCS.NS', 'INFY.NS', 'TATAMOTORS.NS', 'MARUTI.NS', 'M&M.NS', 'ONGC.NS', 
-    'NTPC.NS', 'POWERGRID.NS', 'COALINDIA.NS', 'BPCL.NS', 'ADANIENT.NS', 'ADANIPORTS.NS', 
-    'TATASTEEL.NS', 'JSWSTEEL.NS', 'HINDALCO.NS', 'ITC.NS', 'HINDUNILVR.NS', 'TITAN.NS', 
-    'SUNPHARMA.NS', 'CIPLA.NS', 'DRREDDY.NS', 'HAL.NS', 'BEL.NS', 'ZOMATO.NS', 'TRENT.NS'
+    # BANKING & FINANCE
+    'HDFCBANK.NS', 'ICICIBANK.NS', 'SBIN.NS', 'AXISBANK.NS', 'KOTAKBANK.NS', 
+    'INDUSINDBK.NS', 'BANKBARODA.NS', 'PNB.NS', 'CANBK.NS', 'AUBANK.NS', 
+    'IDFCFIRSTB.NS', 'BAJFINANCE.NS', 'BAJAJFINSV.NS', 'CHOLAFIN.NS', 
+    'SHRIRAMFIN.NS', 'RECLTD.NS', 'PFC.NS', 'SBICARD.NS', 'MUTHOOTFIN.NS',
+
+    # IT & TECH
+    'TCS.NS', 'INFY.NS', 'HCLTECH.NS', 'WIPRO.NS', 'TECHM.NS', 'LTIM.NS', 
+    'COFORGE.NS', 'PERSISTENT.NS', 'MPHASIS.NS',
+
+    # AUTO
+    'TATAMOTORS.NS', 'MARUTI.NS', 'M&M.NS', 'BAJAJ-AUTO.NS', 'EICHERMOT.NS', 
+    'HEROMOTOCO.NS', 'TVSMOTOR.NS', 'ASHOKLEY.NS', 'BHARATFORG.NS', 
+
+    # ENERGY & POWER
+    'RELIANCE.NS', 'ONGC.NS', 'NTPC.NS', 'POWERGRID.NS', 'COALINDIA.NS', 
+    'BPCL.NS', 'IOC.NS', 'TATAPOWER.NS', 'ADANIGREEN.NS', 'ADANIENT.NS', 
+    'ADANIPORTS.NS', 'GAIL.NS',
+
+    # METALS
+    'TATASTEEL.NS', 'JSWSTEEL.NS', 'HINDALCO.NS', 'VEDL.NS', 'NMDC.NS', 
+    'SAIL.NS', 'JINDALSTEL.NS', 'NATIONALUM.NS',
+
+    # CONSUMER / PHARMA / REALTY
+    'ITC.NS', 'HINDUNILVR.NS', 'TITAN.NS', 'ASIANPAINT.NS', 'NESTLEIND.NS', 
+    'BRITANNIA.NS', 'GODREJCP.NS', 'TATACONSUM.NS', 'DABUR.NS', 'SUNPHARMA.NS', 
+    'CIPLA.NS', 'DRREDDY.NS', 'DIVISLAB.NS', 'APOLLOHOSP.NS', 'LUPIN.NS', 
+    'DLF.NS', 'GODREJPROP.NS',
+
+    # HIGH BETA / MOMENTUM
+    'HAL.NS', 'BEL.NS', 'MAZDOCK.NS', 'BHEL.NS', 'ZOMATO.NS', 'TRENT.NS', 
+    'IRCTC.NS', 'INDIGO.NS', 'JIOFIN.NS', 'ABBOTINDIA.NS', 'SIEMENS.NS', 
+    'ABB.NS', 'POLYCAB.NS', 'HAVELLS.NS', 'VOLTAS.NS'
 ]
+
+# 2. GLOBAL METALS & COMMODITIES
+METALS = ['GC=F', 'SI=F', 'HG=F', 'PL=F', 'PA=F', 'AA', 'FCX', 'SCCO']
+
+# 3. S&P 500 (Liquid Options Only)
 SP_LIQUID_FNO = [
-    'AAPL', 'MSFT', 'NVDA', 'AMZN', 'GOOGL', 'META', 'TSLA', 'AMD', 'AVGO', 'JPM', 'BAC', 
-    'GS', 'MS', 'NFLX', 'DIS', 'WMT', 'COST', 'XOM', 'CVX', 'BA', 'CAT', 'CRM', 'ADBE'
+    # MAGNIFICENT SEVEN
+    'AAPL', 'MSFT', 'NVDA', 'AMZN', 'GOOGL', 'META', 'TSLA',
+
+    # SEMIS & AI
+    'AMD', 'AVGO', 'QCOM', 'INTC', 'MU', 'TXN', 'AMAT', 'LRCX', 'ADI', 
+    'SMCI', 'ARM', 'TSM',
+
+    # FINANCE
+    'JPM', 'BAC', 'WFC', 'C', 'GS', 'MS', 'V', 'MA', 'AXP', 'BLK', 
+    'PYPL', 'COIN', 'HOOD',
+
+    # SOFTWARE / CLOUD
+    'CRM', 'ADBE', 'ORCL', 'IBM', 'NOW', 'PANW', 'PLTR', 'SNOW', 'CRWD', 
+    'SQ', 'SHOP', 'UBER', 'ABNB',
+
+    # MEDIA / RETAIL / PHARMA
+    'NFLX', 'DIS', 'CMCSA', 'TMUS', 'VZ', 'T', 'WMT', 'COST', 'TGT', 'HD', 
+    'LOW', 'NKE', 'SBUX', 'MCD', 'LULU', 'CMG', 'BKNG', 'MAR', 'LLY', 'UNH', 
+    'JNJ', 'PFE', 'MRK', 'ABBV', 'BMY', 'AMGN', 'GILD', 'ISRG', 'CVS',
+
+    # INDUSTRIAL / ENERGY
+    'XOM', 'CVX', 'COP', 'SLB', 'OXY', 'GE', 'CAT', 'BA', 'LMT', 'RTX', 
+    'HON', 'UPS', 'UNP', 'DE', 'KO', 'PEP', 'PG', 'PM', 'MO', 'CL'
 ]
 
-ALL_TICKERS = CRYPTO + COMMODITIES + LIQUID_FNO + SP_LIQUID_FNO
-NON_STOCK_ASSETS = set(CRYPTO + COMMODITIES)
+ALL_TICKERS = LIQUID_FNO + METALS + SP_LIQUID_FNO
 
+# SCAN CONFIGURATION
 SCAN_CONFIGS = [
     {"label": "5m",  "interval": "5m",  "period": "5d",   "resample": None},
     {"label": "15m", "interval": "15m", "period": "15d",  "resample": None},
@@ -44,10 +103,11 @@ SCAN_CONFIGS = [
 ]
 
 # ==========================================
-# 2. ANALYSIS ENGINE (OPTIMIZED)
+# 2. CORE PATTERN LOGIC
 # ==========================================
 
 def get_pivots(series, order=8):
+    """ Finds significant Highs and Lows """
     values = series.values
     if len(values) == 0: return [], []
     high_idx = argrelextrema(values, np.greater, order=order)[0]
@@ -55,358 +115,272 @@ def get_pivots(series, order=8):
     return high_idx, low_idx
 
 def check_line_integrity(series, idx_start, idx_end, slope, intercept, mode="upper"):
+    """ Ensures price does not cut through the trendline """
     if idx_end <= idx_start: return False
-    # Vectorized Check using NumPy broadcasting
     x_range = np.arange(idx_start, idx_end + 1)
     line_values = slope * x_range + intercept
     actual_values = series.iloc[idx_start : idx_end + 1].values
+    tolerance = 0.003 
     
-    # 0.3% tolerance for wicks
-    tolerance = 0.003
     if mode == "upper":
-        return not np.any(actual_values > (line_values * (1 + tolerance)))
+        violations = actual_values > (line_values * (1 + tolerance))
     else:
-        return not np.any(actual_values < (line_values * (1 - tolerance)))
+        violations = actual_values < (line_values * (1 - tolerance))
+    
+    return not np.any(violations)
 
-def analyze_chunk(df, ticker, label):
-    """
-    Lightweight analysis function. Returns a 'Result Object' (Dict) or None.
-    Does NOT generate charts here to save RAM.
-    """
+def analyze_ticker(df):
+    """ Main Pattern Recognition Function """
     if len(df) < 50: return None
     
-    # Check Online Status
-    last_candle_time = df.index[-1]
-    now = datetime.now(timezone.utc) if last_candle_time.tzinfo else datetime.now()
-    if last_candle_time.tzinfo and now.tzinfo is None: now = now.replace(tzinfo=timezone.utc)
-    diff = now - last_candle_time
-    is_online = diff < timedelta(minutes=60)
-    last_time_str = last_candle_time.strftime("%H:%M")
-
-    # Pivot Detection
+    # 1. Find Pivots
     high_idxs, low_idxs = get_pivots(df['High'], order=8)
     if len(high_idxs) < 2 or len(low_idxs) < 2: return None
 
+    # 2. Get Last 2 Major Swings
     Ax, Cx = high_idxs[-2], high_idxs[-1]
     Ay, Cy = df['High'].iloc[Ax], df['High'].iloc[Cx]
     Bx, Dx = low_idxs[-2], low_idxs[-1]
     By, Dy = df['Low'].iloc[Bx], df['Low'].iloc[Dx]
 
-    # Quick Geometric Filter
+    # 3. Geometry Check (Triangle Shape)
     if not (Ay > Cy and By < Dy): return None
 
-    # Math
+    # 4. Math (Slopes)
     slope_upper = (Cy - Ay) / (Cx - Ax)
     intercept_upper = Ay - (slope_upper * Ax)
     slope_lower = (Dy - By) / (Dx - Bx)
     intercept_lower = By - (slope_lower * Bx)
 
-    # Detailed Integrity Filter
+    # 5. Integrity Check (No Cuts)
     if not check_line_integrity(df['High'], Ax, Cx, slope_upper, intercept_upper, "upper"): return None
     if not check_line_integrity(df['Low'], Bx, Dx, slope_lower, intercept_lower, "lower"): return None
 
-    # Projection
+    # 6. Projection (The "E" Leg)
     current_idx = len(df) - 1
     proj_upper = (slope_upper * current_idx) + intercept_upper
     proj_lower = (slope_lower * current_idx) + intercept_lower
     current_price = df['Close'].iloc[-1]
     
+    # Price must be INSIDE the triangle
     if not (proj_lower < current_price < proj_upper): return None
     
+    # Triangle must be TIGHT (Coiling)
     width_pct = (proj_upper - proj_lower) / current_price
     
-    if width_pct < 0.035:
-        # Return minimal data needed to reconstruct the chart later
+    if width_pct < 0.035: # < 3.5% Range
         return {
-            "ticker": ticker,
-            "label": label,
-            "price": current_price,
-            "coil": width_pct,
-            "is_online": is_online,
-            "last_time": last_time_str,
-            "pivots": {"Ax": Ax, "Bx": Bx}, # Only start points needed for chart logic
-            "lines": {"su": slope_upper, "iu": intercept_upper, "sl": slope_lower, "il": intercept_lower},
-            "df_slice": df.iloc[-int((len(df)-min(Ax, Bx))*5):].copy() # Store SMALL slice (RAM optimization)
+            "pivots": {"Ax": Ax, "Ay": Ay, "Cx": Cx, "Cy": Cy, "Bx": Bx, "By": By, "Dx": Dx, "Dy": Dy},
+            "slopes": {"upper": slope_upper, "lower": slope_lower},
+            "intercepts": {"upper": intercept_upper, "lower": intercept_lower},
+            "coil_width": width_pct,
+            "price": current_price
         }
     return None
 
 def resample_data(df, interval):
+    """ Resamples 1h data to 4h """
     logic = {'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last', 'Volume': 'sum'}
     return df.resample(interval).agg(logic).dropna()
 
 # ==========================================
-# 3. SINGLETON STATE MANAGER
+# 3. PRO CHARTING (2X ZOOM)
 # ==========================================
 
-class MarketEngine:
-    def __init__(self):
-        self.results = {cfg['label']: [] for cfg in SCAN_CONFIGS}
-        self.last_update = {cfg['label']: None for cfg in SCAN_CONFIGS}
-        self.is_scanning = False
-        self.lock = threading.Lock()
+def plot_triangle_clean(df, ticker, data_dict, interval_label):
+    # 1. ZOOM LOGIC (Dynamic 2X Context)
+    pattern_start_idx = min(data_dict['pivots']['Ax'], data_dict['pivots']['Bx'])
+    pattern_len = len(df) - pattern_start_idx
+    # Show pattern + 1.5x history before it
+    history_buffer = int(pattern_len * 1.5) 
+    start_view_idx = max(0, pattern_start_idx - history_buffer)
     
-    def run_scan(self, config_idx):
-        """Runs scan for a specific config and updates global state"""
-        cfg = SCAN_CONFIGS[config_idx]
-        label = cfg['label']
-        
-        with self.lock:
-            # Check if recently updated (debounce 2 mins)
-            if self.last_update[label] and (datetime.now() - self.last_update[label]).seconds < 120:
-                return 
-
-        print(f"⚡ ENGINE: Running {label} Scan...")
-        
-        try:
-            # Batch Download (Network Bound)
-            data = yf.download(ALL_TICKERS, period=cfg['period'], interval=cfg['interval'], group_by='ticker', progress=False, threads=True)
-            
-            new_matches = []
-            
-            # Processing (CPU Bound)
-            for ticker in ALL_TICKERS:
-                try:
-                    df = data[ticker].dropna() if len(ALL_TICKERS) > 1 else data.dropna()
-                    if df.empty: continue
-                    if cfg['resample']: df = resample_data(df, cfg['resample'])
-                    
-                    match = analyze_chunk(df, ticker, label)
-                    if match:
-                        new_matches.append(match)
-                        # Trigger Alert immediately if high priority
-                        if ENABLE_TELEGRAM and (match['is_online'] or label == '4h'):
-                            self.send_alert(match)
-                except: continue
-            
-            with self.lock:
-                self.results[label] = new_matches
-                self.last_update[label] = datetime.now()
-                
-        except Exception as e:
-            print(f"Engine Error: {e}")
-
-    def send_alert(self, match):
-        import requests
-        status = "🟢" if match['is_online'] else "🔴"
-        msg = f"{status} {match['ticker']} ({match['label']}) Alert!\nPrice: {match['price']:.2f}\nCoil: {match['coil']*100:.1f}%"
-        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-        try: requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": msg})
-        except: pass
-
-@st.cache_resource
-def get_engine():
-    return MarketEngine()
-
-# Background Scheduler
-@st.cache_resource
-def start_scheduler():
-    engine = get_engine()
-    def job():
-        # Scan all timeframes sequentially
-        for i in range(len(SCAN_CONFIGS)):
-            engine.run_scan(i)
-            time.sleep(10) # Pause between timeframes
+    df_slice = df.iloc[start_view_idx:].copy()
     
-    schedule.every(15).minutes.do(job)
-    
-    def loop():
-        # Initial Run
-        job() 
-        while True:
-            schedule.run_pending()
-            time.sleep(1)
-            
-    t = threading.Thread(target=loop, daemon=True)
-    t.start()
-    return t
+    # 2. FORMAT X-AXIS (Readable Dates)
+    if interval_label in ["5m", "15m"]:
+        date_format = "%d %H:%M" 
+    else:
+        date_format = "%b %d"    
 
-# ==========================================
-# 4. LAZY CHARTING (RAM EFFICIENT)
-# ==========================================
+    df_slice['date_str'] = df_slice.index.strftime(date_format)
 
-def render_chart(match_data):
-    """Generates Plotly Figure ON DEMAND only"""
-    df = match_data['df_slice']
-    ticker = match_data['ticker']
-    label = match_data['label']
-    
-    # X-Axis Format
-    date_fmt = "%d %H:%M" if label in ["5m", "15m"] else "%b %d"
-    df['date_str'] = df.index.strftime(date_fmt)
-    
+    # 3. CREATE CHART
     fig = go.Figure(data=[go.Candlestick(
-        x=df['date_str'], open=df['Open'], high=df['High'], 
-        low=df['Low'], close=df['Close'], name=ticker
+        x=df_slice['date_str'], 
+        open=df_slice['Open'], high=df_slice['High'],
+        low=df_slice['Low'], close=df_slice['Close'], 
+        name=ticker
     )])
+
+    # 4. DRAW LINES
+    x_indices = np.arange(len(df))
     
-    # Reconstruct Lines
-    # Note: Indices must be recalculated relative to the slice
-    # The slice contains the last N bars. We map the line equation to these N bars.
+    # Upper Line
+    slope_u = data_dict['slopes']['upper']
+    int_u = data_dict['intercepts']['upper']
+    line_start_u = data_dict['pivots']['Ax']
+    y_vals_upper = slope_u * x_indices[line_start_u:] + int_u
     
-    # Current index in the original DF was 'len(original_df)'. 
-    # In the slice, the last bar is 'len(df)-1'.
-    # We project the line backwards from the last bar.
+    # Lower Line
+    slope_l = data_dict['slopes']['lower']
+    int_l = data_dict['intercepts']['lower']
+    line_start_l = data_dict['pivots']['Bx']
+    y_vals_lower = slope_l * x_indices[line_start_l:] + int_l
+
+    # Clip lines to view
+    def get_slice_dates(start_idx):
+        eff_start = max(start_idx, start_view_idx)
+        return df_slice['date_str'][eff_start - start_view_idx:].tolist()
     
-    slice_len = len(df)
-    x_vals = np.arange(slice_len) # 0 to N
-    
-    # We stored slope/intercept relative to the *Original* indexing.
-    # Math trick: The slope (m) is constant. We just need to find the Y value of the line 
-    # at the current last bar, and draw it back with slope m.
-    
-    # Calculate Y at the very last bar (Pattern End) using stored equation
-    # We don't have the original index 'x' stored efficiently, but we know the price must be bound.
-    # Alternative: Re-calculate line points based on price.
-    
-    # Easier way for visual accuracy without storing massive indices:
-    # Use the Slope and project from the *current price* region roughly? 
-    # No, that's inaccurate.
-    
-    # Let's use the Slope/Intercept stored, but we need the original X index.
-    # FIX: We will re-calculate the line y-values relative to the SLICE.
-    # The 'intercept' stored was for x=0 of original DF.
-    # slice_start_index_original = (Original_Len - Slice_Len).
-    # y = mx + c becomes y_slice = m(x_slice + slice_start_original) + c
-    # We don't know original len. 
-    
-    # OPTIMIZATION: Just draw the line between the Pivot Prices and the End.
-    # We didn't store pivot prices to save space. 
-    # Okay, let's just do the simplest robust thing:
-    # In 'analyze_chunk', we stored 'lines'. Let's calculate the start/end Y values THERE 
-    # and store them.
-    
-    # (Self-Correction: To keep this simple and fast, let's assume the previous logic 
-    # of calculating lines *before* slicing is better, but consumes RAM. 
-    # New Approach: Calculate the line points for the slice inside analyze_chunk and store just those points.)
-    
-    # Let's revert to a slightly simpler logic: The 'df_slice' is what we show.
-    # We will compute the line arrays inside the render function? No, we lack context.
-    
-    # OK, Updated Strategy for `analyze_chunk`:
-    # We calculate the Y-values for the *visible slice* and store them as a small list.
-    pass # See implementation below
+    u_offset = max(0, start_view_idx - line_start_u)
+    l_offset = max(0, start_view_idx - line_start_l)
+
+    fig.add_trace(go.Scatter(
+        x=get_slice_dates(line_start_u), y=y_vals_upper[u_offset:], 
+        mode='lines', name='Res', line=dict(color='red', width=2)
+    ))
+    fig.add_trace(go.Scatter(
+        x=get_slice_dates(line_start_l), y=y_vals_lower[l_offset:], 
+        mode='lines', name='Sup', line=dict(color='green', width=2)
+    ))
+
+    fig.update_layout(
+        title=f"{ticker} (Coil: {data_dict['coil_width']*100:.2f}%)",
+        xaxis_rangeslider_visible=False,
+        xaxis_type='category', 
+        height=450,
+        margin=dict(l=10, r=10, t=40, b=10),
+        xaxis=dict(tickangle=-45, nticks=15) 
+    )
+    return fig
+
+def send_telegram_alert(message):
+    if not ENABLE_TELEGRAM: return
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message}
+    try: requests.post(url, json=payload)
+    except: pass
 
 # ==========================================
-# 5. UI IMPLEMENTATION
+# 4. BACKGROUND AUTOMATION
+# ==========================================
+
+@st.cache_resource
+class BackgroundScanner:
+    def __init__(self):
+        self.running = False
+        self.thread = None
+        
+    def scan_job(self):
+        print("⏰ Auto-Scan Triggered...")
+        for config in SCAN_CONFIGS:
+            try:
+                data = yf.download(ALL_TICKERS, period=config['period'], interval=config['interval'], group_by='ticker', progress=False, threads=True)
+                for ticker in ALL_TICKERS:
+                    try:
+                        if len(ALL_TICKERS) > 1: df = data[ticker].dropna()
+                        else: df = data.dropna()
+                        if df.empty: continue
+                        if config['resample']: df = resample_data(df, config['resample'])
+                        
+                        match = analyze_ticker(df)
+                        if match:
+                            msg = f"🚀 {ticker} ({config['label']}) Alert!\nPrice: {match['price']:.2f}\nCoil: {match['coil_width']*100:.1f}%"
+                            print(msg)
+                            send_telegram_alert(msg)
+                    except: continue
+            except: continue
+
+    def start(self):
+        if not self.running:
+            self.running = True
+            def loop():
+                schedule.every(15).minutes.do(self.scan_job)
+                while True:
+                    schedule.run_pending()
+                    time.sleep(1)
+            self.thread = threading.Thread(target=loop, daemon=True)
+            self.thread.start()
+
+scanner = BackgroundScanner()
+scanner.start()
+
+# ==========================================
+# 5. STREAMLIT UI (SECURE)
 # ==========================================
 
 st.set_page_config(page_title="Triangle Pro", layout="wide")
 
-# Auth
-if 'authenticated' not in st.session_state: st.session_state.authenticated = False
+# Initialize Session
+if 'authenticated' not in st.session_state:
+    st.session_state.authenticated = False
 
+# --- LOGIN FORM ---
 if not st.session_state.authenticated:
-    with st.form("login"):
-        if st.form_submit_button("Login") and st.text_input("Password", type="password") == APP_PASSWORD:
-            st.session_state.authenticated = True
-            st.rerun()
-else:
-    # Init Engine
-    engine = get_engine()
-    start_scheduler() # Ensures background thread is alive
-    
-    st.title("⚡ Triangle Hunter: Architect Edition")
-    
-    # Dashboard Stats
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        st.caption(f"Status: Background Engine Active | Monitored Assets: {len(ALL_TICKERS)}")
+    col1, col2, col3 = st.columns([1,2,1])
     with col2:
-        if st.button("Logout"): 
+        st.title("🔒 Triangle Hunter Pro")
+        with st.form("login_form"):
+            password = st.text_input("Enter Access Code", type="password")
+            submit = st.form_submit_button("Unlock Dashboard", type="primary")
+            
+            if submit:
+                if password == APP_PASSWORD:
+                    st.session_state.authenticated = True
+                    st.rerun()
+                else:
+                    st.error("❌ Incorrect Access Code")
+
+else:
+    # --- MAIN DASHBOARD ---
+    st.title("🔻 Triangle Hunter Pro")
+    
+    # Status Bar
+    col1, col2 = st.columns([4, 1])
+    with col1:
+        st.caption(f"✅ System Active | Monitoring {len(ALL_TICKERS)} Liquid Assets")
+    with col2:
+        if st.button("🚪 Logout"):
             st.session_state.authenticated = False
             st.rerun()
-    
-    tabs = st.tabs(["5 Min", "15 Min", "1 Hour", "4 Hour"])
-    
-    for i, cfg in enumerate(SCAN_CONFIGS):
-        label = cfg['label']
+
+    # Timeframe Tabs
+    tabs = st.tabs(["⚡ 5 Min", "⏱️ 15 Min", "hourly 1 Hour", "📅 4 Hour"])
+
+    for i, config in enumerate(SCAN_CONFIGS):
         with tabs[i]:
-            # Header with Last Update Time
-            last_run = engine.last_update[label]
-            time_lbl = last_run.strftime("%H:%M:%S") if last_run else "Pending..."
-            
-            c1, c2 = st.columns([4,1])
-            c1.info(f"Last Scan: **{time_lbl}**")
-            if c2.button(f"Force Scan", key=f"force_{i}"):
-                with st.spinner("Scanning..."):
-                    engine.run_scan(i)
-                    st.rerun()
-
-            # Retrieve Results from Global State (Zero Latency)
-            results = engine.results[label]
-            
-            if not results:
-                st.warning("No patterns currently detected.")
-            else:
-                # Segregation Logic
-                live_eq, live_rest = [], []
-                off_eq, off_rest = [], []
+            if st.button(f"Start {config['label']} Scan", key=f"btn_{i}", type="primary"):
                 
-                for r in results:
-                    is_stock = r['ticker'] not in NON_STOCK_ASSETS
-                    if r['is_online']:
-                        if is_stock: live_eq.append(r)
-                        else: live_rest.append(r)
-                    else:
-                        if is_stock: off_eq.append(r)
-                        else: off_rest.append(r)
+                with st.spinner("Analyzing Market Geometry..."):
+                    try:
+                        # Batch Download
+                        data = yf.download(ALL_TICKERS, period=config['period'], interval=config['interval'], group_by='ticker', progress=False, threads=True)
+                        
+                        cols = st.columns(3)
+                        c_idx = 0
+                        found = False
+                        
+                        for ticker in ALL_TICKERS:
+                            try:
+                                if len(ALL_TICKERS) > 1: df = data[ticker].dropna()
+                                else: df = data.dropna()
+                                if df.empty: continue
+                                if config['resample']: df = resample_data(df, config['resample'])
 
-                # Render Helper
-                def render_grid(match_list, title, color="green"):
-                    if not match_list: return
-                    st.markdown(f"#### {title}")
-                    cols = st.columns(3)
-                    for idx, m in enumerate(match_list):
-                        with cols[idx % 3]:
-                            st.caption(f"**{m['ticker']}** @ {m['price']:.2f} | Coil: {m['coil']*100:.1f}%")
+                                match = analyze_ticker(df)
+                                if match:
+                                    found = True
+                                    with cols[c_idx % 3]:
+                                        # Visual Card
+                                        st.success(f"**{ticker}** | Coil: {match['coil_width']*100:.2f}%")
+                                        # Pass the label to fix X-Axis
+                                        fig = plot_triangle_clean(df, ticker, match, config['label'])
+                                        st.plotly_chart(fig, use_container_width=True)
+                                        c_idx += 1
+                            except: continue
+                        
+                        if not found: st.info("No tight patterns found in this timeframe.")
                             
-                            # --- LAZY CHART GENERATION ---
-                            # Re-creating chart logic here to keep 'analyze_chunk' pure data
-                            df = m['df_slice']
-                            
-                            # X-Axis
-                            if label in ["5m", "15m"]: df['d'] = df.index.strftime("%d %H:%M")
-                            else: df['d'] = df.index.strftime("%b %d")
-                            
-                            fig = go.Figure(data=[go.Candlestick(
-                                x=df['d'], open=df['Open'], high=df['High'], 
-                                low=df['Low'], close=df['Close'], name=m['ticker']
-                            )])
-                            
-                            # Draw Lines (Simplified for Robustness)
-                            # We project line from last bar backwards using slope
-                            # y = mx + c. 
-                            # Price at last bar (approx) = slope * idx + intercept
-                            # We draw a line based on the slope visually starting from the end of pattern
-                            
-                            # To be perfectly accurate without storing massive arrays:
-                            # We calculate the Y value at the START of the slice and END of the slice
-                            # using the stored line equation.
-                            # We need the 'integer index' of the slice start relative to original.
-                            # That is missing.
-                            
-                            # IMPROVED VISUALIZATION TRICK:
-                            # We don't draw the *exact* original line. We draw a line that connects
-                            # the stored pivots (if they are in slice) to the projection.
-                            # Since we optimized for RAM, let's just show the CANDLES and the COIL VALUE.
-                            # Visualizing the lines perfectly requires the original index context.
-                            
-                            fig.update_layout(
-                                margin=dict(l=0, r=0, t=0, b=0), 
-                                height=300, 
-                                xaxis_type='category',
-                                xaxis_rangeslider_visible=False
-                            )
-                            st.plotly_chart(fig, use_container_width=True)
-
-                if live_eq or live_rest:
-                    st.success("🟢 Live Markets")
-                    render_grid(live_eq, "Stocks")
-                    render_grid(live_rest, "Crypto & Commodities")
-                    st.divider()
-                
-                if off_eq or off_rest:
-                    st.error("🔴 Offline Markets")
-                    with st.expander("Show Watchlist"):
-                        render_grid(off_eq, "Stocks")
-                        render_grid(off_rest, "Crypto & Commodities")
+                    except Exception as e:
+                        st.error(f"Data Error: {e}")
