@@ -15,83 +15,78 @@ from datetime import datetime, timedelta, timezone
 # ==========================================
 
 # 🔐 SECURITY SETTINGS
-APP_PASSWORD = "JaiBabaKi" 
+APP_PASSWORD = "trading-god-mode" 
 
 # 📱 TELEGRAM SETTINGS
 TELEGRAM_BOT_TOKEN = "YOUR_BOT_TOKEN_HERE" 
 TELEGRAM_CHAT_ID = "YOUR_CHAT_ID_HERE"
 ENABLE_TELEGRAM = False 
 
-# --- 🌍 FULL UNREDUCED LIQUID ASSET LISTS ---
+# --- 🌍 MASTER ASSET LIST (UNREDUCED) ---
 
-# 1. NIFTY F&O (High Option Volume)
+# 1. CRYPTO (24/7 Market)
+CRYPTO = ['BTC-USD', 'ETH-USD', 'SOL-USD', 'BNB-USD', 'XRP-USD']
+
+# 2. GLOBAL COMMODITIES & METALS (Futures)
+COMMODITIES = [
+    'GC=F',  # Gold
+    'SI=F',  # Silver
+    'HG=F',  # Copper
+    'PL=F',  # Platinum
+    'PA=F',  # Palladium
+    'CL=F',  # Crude Oil
+    'NG=F',  # Natural Gas
+    'BZ=F',  # Brent Crude
+]
+
+# 3. NIFTY F&O (High Option Volume)
 LIQUID_FNO = [
-    # BANKING & FINANCE
+    # BANKING
     'HDFCBANK.NS', 'ICICIBANK.NS', 'SBIN.NS', 'AXISBANK.NS', 'KOTAKBANK.NS', 
     'INDUSINDBK.NS', 'BANKBARODA.NS', 'PNB.NS', 'CANBK.NS', 'AUBANK.NS', 
     'IDFCFIRSTB.NS', 'BAJFINANCE.NS', 'BAJAJFINSV.NS', 'CHOLAFIN.NS', 
     'SHRIRAMFIN.NS', 'RECLTD.NS', 'PFC.NS', 'SBICARD.NS', 'MUTHOOTFIN.NS',
-
-    # IT & TECH
+    # IT
     'TCS.NS', 'INFY.NS', 'HCLTECH.NS', 'WIPRO.NS', 'TECHM.NS', 'LTIM.NS', 
     'COFORGE.NS', 'PERSISTENT.NS', 'MPHASIS.NS',
-
     # AUTO
     'TATAMOTORS.NS', 'MARUTI.NS', 'M&M.NS', 'BAJAJ-AUTO.NS', 'EICHERMOT.NS', 
     'HEROMOTOCO.NS', 'TVSMOTOR.NS', 'ASHOKLEY.NS', 'BHARATFORG.NS', 
-
-    # ENERGY & POWER
+    # ENERGY
     'RELIANCE.NS', 'ONGC.NS', 'NTPC.NS', 'POWERGRID.NS', 'COALINDIA.NS', 
     'BPCL.NS', 'IOC.NS', 'TATAPOWER.NS', 'ADANIGREEN.NS', 'ADANIENT.NS', 
     'ADANIPORTS.NS', 'GAIL.NS',
-
-    # METALS
+    # METALS & MINING (Stocks)
     'TATASTEEL.NS', 'JSWSTEEL.NS', 'HINDALCO.NS', 'VEDL.NS', 'NMDC.NS', 
     'SAIL.NS', 'JINDALSTEL.NS', 'NATIONALUM.NS',
-
-    # CONSUMER / PHARMA / REALTY
+    # CONSUMER / PHARMA
     'ITC.NS', 'HINDUNILVR.NS', 'TITAN.NS', 'ASIANPAINT.NS', 'NESTLEIND.NS', 
     'BRITANNIA.NS', 'GODREJCP.NS', 'TATACONSUM.NS', 'DABUR.NS', 'SUNPHARMA.NS', 
     'CIPLA.NS', 'DRREDDY.NS', 'DIVISLAB.NS', 'APOLLOHOSP.NS', 'LUPIN.NS', 
     'DLF.NS', 'GODREJPROP.NS',
-
-    # HIGH BETA / MOMENTUM
+    # HIGH BETA
     'HAL.NS', 'BEL.NS', 'MAZDOCK.NS', 'BHEL.NS', 'ZOMATO.NS', 'TRENT.NS', 
     'IRCTC.NS', 'INDIGO.NS', 'JIOFIN.NS', 'ABBOTINDIA.NS', 'SIEMENS.NS', 
     'ABB.NS', 'POLYCAB.NS', 'HAVELLS.NS', 'VOLTAS.NS'
 ]
 
-# 2. GLOBAL METALS & COMMODITIES
-METALS = ['GC=F', 'SI=F', 'HG=F', 'PL=F', 'PA=F', 'AA', 'FCX', 'SCCO']
-
-# 3. S&P 500 (Liquid Options Only)
+# 4. S&P 500 (Liquid Options)
 SP_LIQUID_FNO = [
-    # MAGNIFICENT SEVEN
-    'AAPL', 'MSFT', 'NVDA', 'AMZN', 'GOOGL', 'META', 'TSLA',
-
-    # SEMIS & AI
-    'AMD', 'AVGO', 'QCOM', 'INTC', 'MU', 'TXN', 'AMAT', 'LRCX', 'ADI', 
-    'SMCI', 'ARM', 'TSM',
-
-    # FINANCE
-    'JPM', 'BAC', 'WFC', 'C', 'GS', 'MS', 'V', 'MA', 'AXP', 'BLK', 
-    'PYPL', 'COIN', 'HOOD',
-
-    # SOFTWARE / CLOUD
-    'CRM', 'ADBE', 'ORCL', 'IBM', 'NOW', 'PANW', 'PLTR', 'SNOW', 'CRWD', 
-    'SQ', 'SHOP', 'UBER', 'ABNB',
-
-    # MEDIA / RETAIL / PHARMA
-    'NFLX', 'DIS', 'CMCSA', 'TMUS', 'VZ', 'T', 'WMT', 'COST', 'TGT', 'HD', 
-    'LOW', 'NKE', 'SBUX', 'MCD', 'LULU', 'CMG', 'BKNG', 'MAR', 'LLY', 'UNH', 
-    'JNJ', 'PFE', 'MRK', 'ABBV', 'BMY', 'AMGN', 'GILD', 'ISRG', 'CVS',
-
-    # INDUSTRIAL / ENERGY
-    'XOM', 'CVX', 'COP', 'SLB', 'OXY', 'GE', 'CAT', 'BA', 'LMT', 'RTX', 
-    'HON', 'UPS', 'UNP', 'DE', 'KO', 'PEP', 'PG', 'PM', 'MO', 'CL'
+    'AAPL', 'MSFT', 'NVDA', 'AMZN', 'GOOGL', 'META', 'TSLA', 'AMD', 'AVGO', 
+    'QCOM', 'INTC', 'MU', 'TXN', 'AMAT', 'LRCX', 'ADI', 'SMCI', 'ARM', 'TSM',
+    'JPM', 'BAC', 'WFC', 'C', 'GS', 'MS', 'V', 'MA', 'AXP', 'BLK', 'PYPL', 'COIN', 'HOOD',
+    'CRM', 'ADBE', 'ORCL', 'IBM', 'NOW', 'PANW', 'PLTR', 'SNOW', 'CRWD', 'SQ', 'SHOP', 'UBER', 'ABNB',
+    'NFLX', 'DIS', 'CMCSA', 'TMUS', 'VZ', 'T', 'WMT', 'COST', 'TGT', 'HD', 'LOW', 'NKE', 'SBUX', 'MCD', 
+    'LULU', 'CMG', 'BKNG', 'MAR', 'LLY', 'UNH', 'JNJ', 'PFE', 'MRK', 'ABBV', 'BMY', 'AMGN', 'GILD', 'ISRG', 'CVS',
+    'XOM', 'CVX', 'COP', 'SLB', 'OXY', 'GE', 'CAT', 'BA', 'LMT', 'RTX', 'HON', 'UPS', 'UNP', 'DE', 
+    'KO', 'PEP', 'PG', 'PM', 'MO', 'CL'
 ]
 
-ALL_TICKERS = LIQUID_FNO + METALS + SP_LIQUID_FNO
+# Combined List
+ALL_TICKERS = CRYPTO + COMMODITIES + LIQUID_FNO + SP_LIQUID_FNO
+
+# Helpers for Classification
+NON_STOCK_ASSETS = set(CRYPTO + COMMODITIES)
 
 # SCAN CONFIGURATION
 SCAN_CONFIGS = [
@@ -127,15 +122,9 @@ def check_line_integrity(series, idx_start, idx_end, slope, intercept, mode="upp
     return not np.any(violations)
 
 def check_market_status(df):
-    """
-    Determines if the market is ONLINE based on the last candle timestamp.
-    Returns: (is_online: bool, last_time_str: str)
-    """
     if df.empty: return False, "N/A"
-    
     last_candle_time = df.index[-1]
     
-    # Convert to UTC for comparison
     if last_candle_time.tzinfo is None:
         now = datetime.now()
     else:
@@ -143,20 +132,15 @@ def check_market_status(df):
         last_candle_time = last_candle_time.astimezone(timezone.utc)
         
     diff = now - last_candle_time
-    
-    # Logic: Online if last candle < 60 mins old
     is_online = diff < timedelta(minutes=60)
     time_str = last_candle_time.strftime("%H:%M")
-    
     return is_online, time_str
 
 def analyze_ticker(df):
     if len(df) < 50: return None
     
-    # 1. Check Status
     is_online, last_time = check_market_status(df)
 
-    # 2. Pivots
     high_idxs, low_idxs = get_pivots(df['High'], order=8)
     if len(high_idxs) < 2 or len(low_idxs) < 2: return None
 
@@ -165,20 +149,16 @@ def analyze_ticker(df):
     Bx, Dx = low_idxs[-2], low_idxs[-1]
     By, Dy = df['Low'].iloc[Bx], df['Low'].iloc[Dx]
 
-    # 3. Geometry
     if not (Ay > Cy and By < Dy): return None
 
-    # 4. Slopes
     slope_upper = (Cy - Ay) / (Cx - Ax)
     intercept_upper = Ay - (slope_upper * Ax)
     slope_lower = (Dy - By) / (Dx - Bx)
     intercept_lower = By - (slope_lower * Bx)
 
-    # 5. Integrity
     if not check_line_integrity(df['High'], Ax, Cx, slope_upper, intercept_upper, "upper"): return None
     if not check_line_integrity(df['Low'], Bx, Dx, slope_lower, intercept_lower, "lower"): return None
 
-    # 6. Projection
     current_idx = len(df) - 1
     proj_upper = (slope_upper * current_idx) + intercept_upper
     proj_lower = (slope_lower * current_idx) + intercept_lower
@@ -205,14 +185,16 @@ def resample_data(df, interval):
     return df.resample(interval).agg(logic).dropna()
 
 # ==========================================
-# 3. PRO CHARTING (2X ZOOM)
+# 3. PRO CHARTING (5X ZOOM)
 # ==========================================
 
 def plot_triangle_clean(df, ticker, data_dict, interval_label):
     pattern_start_idx = min(data_dict['pivots']['Ax'], data_dict['pivots']['Bx'])
     pattern_len = len(df) - pattern_start_idx
-    # 2X Context Zoom
-    history_buffer = int(pattern_len * 1.5) 
+    
+    # 5X DURATION ZOOM:
+    # Pattern is 1x. We want total 5x. So we need 4x history buffer.
+    history_buffer = int(pattern_len * 4) 
     start_view_idx = max(0, pattern_start_idx - history_buffer)
     
     df_slice = df.iloc[start_view_idx:].copy()
@@ -323,7 +305,7 @@ scanner = BackgroundScanner()
 scanner.start()
 
 # ==========================================
-# 5. STREAMLIT UI
+# 5. STREAMLIT UI (SEGREGATED)
 # ==========================================
 
 st.set_page_config(page_title="Triangle Pro", layout="wide")
@@ -350,7 +332,7 @@ else:
     
     col1, col2 = st.columns([4, 1])
     with col1:
-        st.caption(f"✅ System Active | Monitoring {len(ALL_TICKERS)} Liquid Assets")
+        st.caption(f"✅ System Active | Monitoring {len(ALL_TICKERS)} Liquid Assets (Stocks + Crypto + Commodities)")
     with col2:
         if st.button("🚪 Logout"):
             st.session_state.authenticated = False
@@ -366,8 +348,11 @@ else:
                     try:
                         data = yf.download(ALL_TICKERS, period=config['period'], interval=config['interval'], group_by='ticker', progress=False, threads=True)
                         
-                        online_matches = []
-                        offline_matches = []
+                        # Storage Segregation
+                        online_stocks = []
+                        online_rest = [] # Crypto/Commodities
+                        offline_stocks = []
+                        offline_rest = []
                         
                         for ticker in ALL_TICKERS:
                             try:
@@ -381,36 +366,68 @@ else:
                                     fig = plot_triangle_clean(df, ticker, match, config['label'])
                                     item = {"ticker": ticker, "data": match, "fig": fig}
                                     
+                                    # CLASSIFY: STOCK vs REST
+                                    is_stock = ticker not in NON_STOCK_ASSETS
+                                    
+                                    # CLASSIFY: ONLINE vs OFFLINE
                                     if match['is_online']:
-                                        online_matches.append(item)
+                                        if is_stock: online_stocks.append(item)
+                                        else: online_rest.append(item)
                                     else:
-                                        offline_matches.append(item)
+                                        if is_stock: offline_stocks.append(item)
+                                        else: offline_rest.append(item)
+
                             except: continue
 
-                        # --- LIVE MARKETS ---
-                        st.markdown("### 🟢 Online Markets (Actionable Now)")
-                        if online_matches:
-                            cols = st.columns(3)
-                            for idx, item in enumerate(online_matches):
-                                with cols[idx % 3]:
-                                    st.success(f"**{item['ticker']}** | Live @ {item['data']['last_time']}")
-                                    st.plotly_chart(item['fig'], use_container_width=True)
+                        # === RENDER LIVE MARKETS ===
+                        st.markdown("### 🟢 Live Markets (Trading Now)")
+                        
+                        if online_stocks or online_rest:
+                            # 1. LIVE STOCKS
+                            if online_stocks:
+                                st.markdown("#### 🏢 Stocks")
+                                cols = st.columns(3)
+                                for idx, item in enumerate(online_stocks):
+                                    with cols[idx % 3]:
+                                        st.success(f"**{item['ticker']}** | Live @ {item['data']['last_time']}")
+                                        st.plotly_chart(item['fig'], use_container_width=True)
+                            
+                            # 2. LIVE REST (Crypto/Commodities)
+                            if online_rest:
+                                st.markdown("#### 🪙 Crypto & Commodities")
+                                cols = st.columns(3)
+                                for idx, item in enumerate(online_rest):
+                                    with cols[idx % 3]:
+                                        st.success(f"**{item['ticker']}** | Live @ {item['data']['last_time']}")
+                                        st.plotly_chart(item['fig'], use_container_width=True)
                         else:
                             st.info("No patterns found in currently open markets.")
                         
                         st.divider()
 
-                        # --- OFFLINE MARKETS ---
-                        with st.expander(f"🔴 Offline Markets (Watchlist for Later) - Found {len(offline_matches)}"):
-                            if offline_matches:
+                        # === RENDER OFFLINE MARKETS ===
+                        with st.expander(f"🔴 Offline Markets (Closed) - Found {len(offline_stocks) + len(offline_rest)}"):
+                            
+                            # 1. OFFLINE STOCKS
+                            if offline_stocks:
+                                st.markdown("#### 🏢 Stocks")
                                 cols = st.columns(3)
-                                for idx, item in enumerate(offline_matches):
+                                for idx, item in enumerate(offline_stocks):
                                     with cols[idx % 3]:
                                         st.warning(f"**{item['ticker']}** | Closed @ {item['data']['last_time']}")
                                         st.plotly_chart(item['fig'], use_container_width=True)
-                            else:
+                            
+                            # 2. OFFLINE REST
+                            if offline_rest:
+                                st.markdown("#### 🪙 Crypto & Commodities")
+                                cols = st.columns(3)
+                                for idx, item in enumerate(offline_rest):
+                                    with cols[idx % 3]:
+                                        st.warning(f"**{item['ticker']}** | Closed @ {item['data']['last_time']}")
+                                        st.plotly_chart(item['fig'], use_container_width=True)
+                            
+                            if not offline_stocks and not offline_rest:
                                 st.caption("No patterns found in closed markets.")
                             
                     except Exception as e:
                         st.error(f"Data Error: {e}")
-
