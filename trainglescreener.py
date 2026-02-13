@@ -7,11 +7,15 @@ from scipy.signal import argrelextrema
 import concurrent.futures
 from datetime import datetime, timedelta, timezone
 
+# ==========================================
+# 1. CONFIGURATION
+# ==========================================
 APP_PASSWORD = "JaiBabaKi"
 ENABLE_TELEGRAM = False
 
 CRYPTO = ['BTC-USD', 'ETH-USD', 'SOL-USD', 'BNB-USD', 'XRP-USD', 'DOGE-USD', 'ADA-USD']
-COMMODITIES = ['GC=F', 'SI=F', 'HG=F', 'PL=F', 'PA=F', 'CL=F', 'NG=F', 'BZ=F']
+# Added ALI=F (Aluminum), LEAD=F, ZINC=F, NICKEL=F
+COMMODITIES = ['GC=F', 'SI=F', 'HG=F', 'PL=F', 'PA=F', 'CL=F', 'NG=F', 'BZ=F', 'ALI=F', 'LEAD=F', 'ZINC=F', 'NICKEL=F']
 LIQUID_FNO = [
     'HDFCBANK.NS', 'ICICIBANK.NS', 'SBIN.NS', 'AXISBANK.NS', 'KOTAKBANK.NS',
     'SBILIFE.NS', 'RELIANCE.NS', 'TCS.NS', 'INFY.NS', 'HCLTECH.NS', 'LT.NS',
@@ -45,12 +49,17 @@ SP_LIQUID_FNO = [
 
 NON_STOCK_ASSETS = set(CRYPTO + COMMODITIES)
 
+# INCREASED PERIODS for 500 candles
 SCAN_CONFIGS = {
-    "5m": {"interval": "5m", "period": "10d", "ttl": 300},
-    "15m": {"interval": "15m", "period": "40d", "ttl": 900},
-    "1h": {"interval": "1h", "period": "200d", "ttl": 3600},
-    "1d": {"interval": "1d", "period": "1y", "ttl": 14400},
+    "5m": {"interval": "5m", "period": "5d", "ttl": 300},
+    "15m": {"interval": "15m", "period": "20d", "ttl": 900},
+    "1h": {"interval": "1h", "period": "100d", "ttl": 3600},
+    "1d": {"interval": "1d", "period": "2y", "ttl": 14400},
 }
+
+# ==========================================
+# 2. DATA ENGINE
+# ==========================================
 
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_market_data(tickers, period, interval):
@@ -105,6 +114,10 @@ def count_touches(series, slope, intercept, tolerance=0.005):
     diff = np.abs(actual_values - line_values)
     touches = np.sum(diff < (line_values * tolerance))
     return touches
+
+# ==========================================
+# 3. ANALYSIS LOGIC
+# ==========================================
 
 def analyze_ticker(df):
     if len(df) < 60: return None
@@ -193,8 +206,12 @@ def analyze_ticker(df):
         }
     return None
 
+# ==========================================
+# 4. CHARTING (500 CANDLE VIEW)
+# ==========================================
+
 def plot_triangle_clean(df, ticker, data_dict, interval_label):
-    view_len = 200 
+    view_len = 500  # UPDATED: 500 Candles
     start_view_idx = max(0, len(df) - view_len)
     df_slice = df.iloc[start_view_idx:].copy()
     
@@ -209,7 +226,7 @@ def plot_triangle_clean(df, ticker, data_dict, interval_label):
         low=df_slice['Low'], close=df_slice['Close'], 
         name=ticker,
         increasing_line_color='black', decreasing_line_color='black',
-        line_width=1.2
+        line_width=1.0 # Slightly thinner for 500 bars
     )])
 
     x_indices = np.arange(len(df))
@@ -231,16 +248,20 @@ def plot_triangle_clean(df, ticker, data_dict, interval_label):
     fig.update_layout(
         xaxis_rangeslider_visible=False,
         xaxis_type='category', 
-        height=320, 
+        height=350, 
         margin=dict(l=5, r=5, t=5, b=5),
-        xaxis=dict(nticks=6, showgrid=False, tickangle=-45),
+        xaxis=dict(nticks=8, showgrid=False, tickangle=-45),
         yaxis=dict(showgrid=False),
         plot_bgcolor='white', paper_bgcolor='white',
         showlegend=False, hovermode="x unified"
     )
     return fig
 
-st.set_page_config(page_title="Screener Pro 1.6", layout="wide", page_icon="📊")
+# ==========================================
+# 5. STREAMLIT APP
+# ==========================================
+
+st.set_page_config(page_title="Screener Pro 1.7", layout="wide", page_icon="📊")
 
 if 'scan_results' not in st.session_state:
     st.session_state.scan_results = {}
@@ -276,7 +297,7 @@ else:
             st.session_state.authenticated = False
             st.rerun()
 
-    st.title("📊 Screener Pro 1.6")
+    st.title("📊 Screener Pro 1.7")
     
     def process_ticker(ticker, data_source, config):
         try:
@@ -342,7 +363,6 @@ else:
                         
                         st.plotly_chart(item['fig'], use_container_width=True, config={'displayModeBar': False})
                         
-                        # SMART HYPERLINKING
                         ticker_base = item['ticker'].replace(".NS", "")
                         if ".NS" in item['ticker']:
                             url = f"https://www.nseindia.com/get-quotes/derivatives?symbol={ticker_base}"
@@ -369,7 +389,6 @@ else:
                             c2.markdown(f":{color}[{lbl}]")
                             st.plotly_chart(item['fig'], use_container_width=True, config={'displayModeBar': False})
                             
-                            # SMART HYPERLINKING (OFFLINE)
                             ticker_base = item['ticker'].replace(".NS", "")
                             if ".NS" in item['ticker']:
                                 url = f"https://www.nseindia.com/get-quotes/derivatives?symbol={ticker_base}"
