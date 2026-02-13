@@ -55,31 +55,27 @@ SP_LIQUID_FNO = [
 ALL_TICKERS = CRYPTO + COMMODITIES + LIQUID_FNO + SP_LIQUID_FNO
 NON_STOCK_ASSETS = set(CRYPTO + COMMODITIES)
 
-# OPTIMIZED PERIODS TO REDUCE DOWNLOAD SIZE
+# OPTIMIZED PERIODS
 SCAN_CONFIGS = [
-    {"label": "5m",  "interval": "5m",  "period": "3d",   "resample": None, "ttl": 300},   # Cache for 5 mins
-    {"label": "15m", "interval": "15m", "period": "10d",  "resample": None, "ttl": 900},   # Cache for 15 mins
-    {"label": "1h",  "interval": "1h",  "period": "40d",  "resample": None, "ttl": 3600},  # Cache for 1 hour
-    {"label": "4h",  "interval": "1h",  "period": "200d", "resample": "4h", "ttl": 14400}, # Cache for 4 hours
+    {"label": "5m",  "interval": "5m",  "period": "3d",   "resample": None, "ttl": 300},
+    {"label": "15m", "interval": "15m", "period": "10d",  "resample": None, "ttl": 900},
+    {"label": "1h",  "interval": "1h",  "period": "40d",  "resample": None, "ttl": 3600},
+    {"label": "4h",  "interval": "1h",  "period": "200d", "resample": "4h", "ttl": 14400},
 ]
 
 # ==========================================
-# 2. CACHED DATA FUNCTIONS (SPEED BOOST)
+# 2. CACHED DATA FUNCTIONS
 # ==========================================
 
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_market_data(tickers, period, interval):
-    """
-    Downloads data and caches it. 
-    If you call this again within 'ttl' seconds, it returns INSTANTLY from RAM.
-    """
     try:
         return yf.download(tickers, period=period, interval=interval, group_by='ticker', progress=False, threads=True)
     except Exception as e:
         return None
 
 # ==========================================
-# 3. CORE LOGIC
+# 3. CORE LOGIC (ENHANCED SIDEWAYS FILTER)
 # ==========================================
 
 def get_pivots(series, order=8):
@@ -126,23 +122,51 @@ def analyze_ticker(df):
     Bx, Dx = low_idxs[-2], low_idxs[-1]
     By, Dy = df['Low'].iloc[Bx], df['Low'].iloc[Dx]
 
-    # Geometry: Allow flat tops/bottoms, reject broadening
-    if Cy > Ay * 1.015: return None
-    if Dy < By * 0.985: return None
-
     slope_upper = (Cy - Ay) / (Cx - Ax)
     intercept_upper = Ay - (slope_upper * Ax)
     slope_lower = (Dy - By) / (Dx - Bx)
     intercept_lower = By - (slope_lower * Bx)
 
+    # === NEW LOGIC: SIDEWAYS ENFORCEMENT ===
+    
+    # 1. Eliminate Diagonals (Wedges)
+    # A Sideways Triangle MUST have opposing slopes (one up, one down) OR one flat line.
+    # Falling Wedge (Bad): Both slopes are negative.
+    # Rising Wedge (Bad): Both slopes are positive.
+    
+    # Tolerance for "Flat": +/- 0.0001
+    tolerance = 1e-4
+    
+    # If both are significantly positive -> Rising Wedge (Reject)
+    if slope_upper > tolerance and slope_lower > tolerance: return None
+    
+    # If both are significantly negative -> Falling Wedge (Reject) -> FIXES DLF/GOOGL/AVGO
+    if slope_upper < -tolerance and slope_lower < -tolerance: return None
+
+    # 2. PROPORTIONALITY (Subwave Balance)
+    # The duration of the top swing (A->C) vs bottom swing (B->D) should be comparable.
+    width_upper = Cx - Ax
+    width_lower = Dx - Bx
+    
+    # Prevent division by zero
+    if width_upper == 0 or width_lower == 0: return None
+    
+    # Ratio of smaller wave to larger wave
+    ratio = min(width_upper, width_lower) / max(width_upper, width_lower)
+    
+    # If one wave is < 25% length of the other, it's malformed/lopsided
+    if ratio < 0.25: return None
+
+    # === END NEW LOGIC ===
+
+    # Standard Geometry Checks
     if abs(slope_upper - slope_lower) < 1e-5: return None
     x_apex = (intercept_lower - intercept_upper) / (slope_upper - slope_lower)
     current_idx = len(df) - 1
     
-    # Apex Integrity
-    if x_apex < current_idx: return None
+    if x_apex < current_idx: return None # Apex in past
     pattern_len = max(Cx, Dx) - min(Ax, Bx)
-    if x_apex > current_idx + (pattern_len * 3): return None
+    if x_apex > current_idx + (pattern_len * 3): return None # Channel-like
 
     if not check_line_integrity(df['High'], Ax, Cx, slope_upper, intercept_upper, "upper"): return None
     if not check_line_integrity(df['Low'], Bx, Dx, slope_lower, intercept_lower, "lower"): return None
@@ -214,22 +238,20 @@ def plot_triangle_clean(df, ticker, data_dict, interval_label):
     return fig
 
 # ==========================================
-# 4. STREAMLIT UI (OPTIMIZED)
+# 4. STREAMLIT UI
 # ==========================================
 
-st.set_page_config(page_title="Triangle Pro 2.2 Turbo", layout="wide")
+st.set_page_config(page_title="Triangle Pro 2.3", layout="wide")
 
-# Initialize Session State for Results
 if 'scan_results' not in st.session_state:
     st.session_state.scan_results = {}
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 
-# Authentication
 if not st.session_state.authenticated:
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
-        st.title("🚀 Triangle Pro 2.2")
+        st.title("🔻 Triangle Pro 2.3")
         with st.form("login_form"):
             password = st.text_input("Enter Access Code", type="password")
             if st.form_submit_button("Unlock Dashboard", type="primary"):
@@ -238,10 +260,9 @@ if not st.session_state.authenticated:
                     st.rerun()
                 else: st.error("❌ Incorrect Access Code")
 else:
-    # Header
-    st.title("🚀 Triangle Finder Pro 2.2 (Turbo Cache)")
+    st.title("🔻 Triangle Finder Pro 2.3 (Sideways Logic)")
     col1, col2 = st.columns([4, 1])
-    with col1: st.caption(f"✅ Active | Monitoring {len(ALL_TICKERS)} Assets | Cached & Parallelized")
+    with col1: st.caption(f"✅ Active | Monitoring {len(ALL_TICKERS)} Assets | Diagonals Filtered")
     with col2:
         if st.button("🚪 Logout"):
             st.session_state.authenticated = False
@@ -263,23 +284,16 @@ else:
             return None
         except: return None
 
-    # SCANNING LOGIC
     for i, config in enumerate(SCAN_CONFIGS):
         with tabs[i]:
-            # Check if we already have results in session state to display immediately
             scan_key = f"scan_{config['label']}"
-            
             if st.button(f"Start {config['label']} Scan", key=f"btn_{i}", type="primary"):
-                with st.spinner(f"Fetching Data & Calculating (Cached Mode)..."):
+                with st.spinner(f"Scanning & Filtering Diagonals..."):
                     try:
-                        # 1. FETCH DATA (CACHED)
-                        # We change the period dynamically in CONFIGS to keep payload small
                         data = fetch_market_data(ALL_TICKERS, config['period'], config['interval'])
-                        
                         if data is None or data.empty:
-                            st.error("No data received from Yahoo Finance.")
+                            st.error("No data received.")
                         else:
-                            # 2. ANALYZE (PARALLEL)
                             results = {"on_s": [], "on_r": [], "off_s": [], "off_r": []}
                             with concurrent.futures.ThreadPoolExecutor() as executor:
                                 futures = {executor.submit(process_ticker, t, data, config): t for t in ALL_TICKERS}
@@ -289,20 +303,14 @@ else:
                                         is_on, is_stk, item = res
                                         if is_on: results["on_s" if is_stk else "on_r"].append(item)
                                         else: results["off_s" if is_stk else "off_r"].append(item)
-                            
-                            # Save to session state so it persists
                             st.session_state.scan_results[scan_key] = results
-                            
                     except Exception as e: st.error(f"Error: {e}")
 
-            # DISPLAY RESULTS (From Session State)
             if scan_key in st.session_state.scan_results:
                 res = st.session_state.scan_results[scan_key]
-                
-                # Check if results exist
                 total_found = len(res["on_s"]) + len(res["on_r"]) + len(res["off_s"]) + len(res["off_r"])
                 if total_found == 0:
-                    st.info("Scan complete. No patterns found.")
+                    st.info("Scan complete. No standard sideways patterns found.")
                 else:
                     st.markdown(f"### 🟢 Live Markets ({len(res['on_s']) + len(res['on_r'])})")
                     if res["on_s"] or res["on_r"]:
@@ -314,9 +322,7 @@ else:
                                     with cols[idx % 3]:
                                         st.success(f"**{item['ticker']}** | {item['data']['last_time']}")
                                         st.plotly_chart(item['fig'], use_container_width=True)
-                    
                     st.divider()
-                    
                     with st.expander(f"🔴 Offline Markets ({len(res['off_s']) + len(res['off_r'])})"):
                         for k, v in [("#### 🏢 Stocks", res["off_s"]), ("#### 🪙 Crypto & Commodities", res["off_r"])]:
                             if v:
