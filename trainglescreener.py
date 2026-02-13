@@ -11,9 +11,8 @@ from datetime import datetime, timedelta, timezone
 # 1. CONFIGURATION
 # ==========================================
 APP_PASSWORD = "JaiBabaKi"
-ENABLE_TELEGRAM = False # Telegram features disabled for simplified architecture
+ENABLE_TELEGRAM = False
 
-# --- ASSET UNIVERSE ---
 CRYPTO = ['BTC-USD', 'ETH-USD', 'SOL-USD', 'BNB-USD', 'XRP-USD', 'DOGE-USD', 'ADA-USD']
 COMMODITIES = ['GC=F', 'SI=F', 'HG=F', 'PL=F', 'PA=F', 'CL=F', 'NG=F', 'BZ=F']
 LIQUID_FNO = [
@@ -49,18 +48,13 @@ SP_LIQUID_FNO = [
 
 NON_STOCK_ASSETS = set(CRYPTO + COMMODITIES)
 
-# NATIVE TIMEFRAMES ONLY (No Resampling)
-# 1h is the max intraday; next step is 1d. No native 2h or 4h available.
+# Updated 1d period to 1y
 SCAN_CONFIGS = {
     "5m": {"interval": "5m", "period": "10d", "ttl": 300},
     "15m": {"interval": "15m", "period": "40d", "ttl": 900},
     "1h": {"interval": "1h", "period": "200d", "ttl": 3600},
-    "1d": {"interval": "1d", "period": "5y", "ttl": 14400},
+    "1d": {"interval": "1d", "period": "1y", "ttl": 14400},
 }
-
-# ==========================================
-# 2. CORE FUNCTIONS
-# ==========================================
 
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_market_data(tickers, period, interval):
@@ -123,7 +117,6 @@ def analyze_ticker(df):
     high_idxs, low_idxs = get_pivots(df['High'], order=8)
     if len(high_idxs) < 2 or len(low_idxs) < 2: return None
 
-    # Get last two major pivots
     Ax, Cx = high_idxs[-2], high_idxs[-1]
     Ay, Cy = df['High'].iloc[Ax], df['High'].iloc[Cx]
     Bx, Dx = low_idxs[-2], low_idxs[-1]
@@ -134,16 +127,13 @@ def analyze_ticker(df):
     slope_lower = (Dy - By) / (Dx - Bx)
     intercept_lower = By - (slope_lower * Bx)
 
-    # 1. Convergence & Parallel Channel Filter
     convergence = abs(slope_upper - slope_lower)
     if convergence < 0.0002: return None 
 
-    # 2. Wedge Filter (Must be opposing slopes or flat)
     tolerance = 1e-4
-    if slope_upper > tolerance and slope_lower > tolerance: return None # Rising Wedge
-    if slope_upper < -tolerance and slope_lower < -tolerance: return None # Falling Wedge
+    if slope_upper > tolerance and slope_lower > tolerance: return None
+    if slope_upper < -tolerance and slope_lower < -tolerance: return None
 
-    # 3. Proportionality (Time & Price)
     width_upper = Cx - Ax
     width_lower = Dx - Bx
     if width_upper == 0 or width_lower == 0: return None
@@ -155,31 +145,27 @@ def analyze_ticker(df):
     if height_A == 0: return None
     if (height_C / height_A) < 0.20: return None 
 
-    # 4. Apex Logic
     x_apex = (intercept_lower - intercept_upper) / (slope_upper - slope_lower)
     current_idx = len(df) - 1
-    if x_apex < current_idx: return None # Broken
+    if x_apex < current_idx: return None
     pattern_len = max(Cx, Dx) - min(Ax, Bx)
-    if x_apex > current_idx + (pattern_len * 3): return None # Too far
+    if x_apex > current_idx + (pattern_len * 3): return None
 
-    # 5. Integrity Check
     if not check_line_integrity(df['High'], Ax, Cx, slope_upper, intercept_upper, "upper"): return None
     if not check_line_integrity(df['Low'], Bx, Dx, slope_lower, intercept_lower, "lower"): return None
 
-    # 6. Price Containment (Breakout Filter)
     proj_upper = (slope_upper * current_idx) + intercept_upper
     proj_lower = (slope_lower * current_idx) + intercept_lower
     current_price = df['Close'].iloc[-1]
-    
     if not (proj_lower <= current_price <= proj_upper): return None
 
-    # 7. Wave Labeling (Simplified)
     pattern_start_idx = min(Ax, Bx)
     wave_label = "Unclear"
     
     if pattern_start_idx > 20:
         lookback = int(pattern_len * 1.5)
         trend_start = max(0, pattern_start_idx - lookback)
+        
         price_start = df['Close'].iloc[trend_start]
         price_end = df['Close'].iloc[pattern_start_idx]
         
@@ -194,7 +180,6 @@ def analyze_ticker(df):
         elif move_pct < pattern_height_pct:
             wave_label = "Wave B"
 
-    # 8. Touch Counting
     start_search = min(Ax, Bx)
     touches_u = count_touches(df['High'].iloc[start_search:], slope_upper, intercept_upper)
     touches_l = count_touches(df['Low'].iloc[start_search:], slope_lower, intercept_lower)
@@ -216,21 +201,14 @@ def analyze_ticker(df):
         }
     return None
 
-# ==========================================
-# 3. CHARTING ENGINE
-# ==========================================
-
 def plot_triangle_clean(df, ticker, data_dict, interval_label):
-    # Force 200 Candle View (or max available)
     view_len = 200
     start_view_idx = max(0, len(df) - view_len)
     df_slice = df.iloc[start_view_idx:].copy()
     
-    # Format Date for Unique X-Axis (Prevents Stacking)
     date_format = "%b %d" if interval_label == "1d" else "%b %d %H:%M"
     df_slice['date_str'] = df_slice.index.strftime(date_format)
 
-    # Black OHLC Bars
     fig = go.Figure(data=[go.Ohlc(
         x=df_slice['date_str'], 
         open=df_slice['Open'], high=df_slice['High'],
@@ -240,7 +218,6 @@ def plot_triangle_clean(df, ticker, data_dict, interval_label):
         line_width=1
     )])
 
-    # Trendlines
     x_indices = np.arange(len(df))
     y_vals_upper = data_dict['slopes']['upper'] * x_indices + data_dict['intercepts']['upper']
     y_vals_lower = data_dict['slopes']['lower'] * x_indices + data_dict['intercepts']['lower']
@@ -268,11 +245,7 @@ def plot_triangle_clean(df, ticker, data_dict, interval_label):
     )
     return fig
 
-# ==========================================
-# 4. STREAMLIT UI
-# ==========================================
-
-st.set_page_config(page_title="Screener Pro 1.1", layout="wide")
+st.set_page_config(page_title="Screener Pro 1.2", layout="wide")
 
 if 'scan_results' not in st.session_state:
     st.session_state.scan_results = {}
@@ -282,7 +255,7 @@ if 'authenticated' not in st.session_state:
 if not st.session_state.authenticated:
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
-        st.title("🔒 Screener Pro 1.1")
+        st.title("🔒 Screener Pro 1.2")
         with st.form("login_form"):
             password = st.text_input("Enter Access Code", type="password")
             if st.form_submit_button("Unlock Dashboard", type="primary"):
@@ -325,7 +298,7 @@ else:
             st.session_state.authenticated = False
             st.rerun()
 
-    st.title(f"📊 Screener Pro 1.1")
+    st.title(f"📊 Screener Pro 1.2")
     st.caption(f"Market: {asset_choice} | Timeframe: {timeframe_choice}")
 
     def process_ticker(ticker, data_source, config):
