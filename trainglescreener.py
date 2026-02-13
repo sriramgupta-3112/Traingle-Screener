@@ -94,12 +94,29 @@ def check_market_status(df):
     time_str = last_candle_time.strftime("%H:%M")
     return is_online, time_str
 
+def count_touches(series, slope, intercept, mode, tolerance=0.005):
+    """Counts how many pivot points touch or are very close to the trendline."""
+    indices = np.arange(len(series))
+    line_values = slope * indices + intercept
+    actual_values = series.values
+    
+    if mode == "upper":
+        # Check highs that are close to the line (within tolerance)
+        diff = np.abs(actual_values - line_values)
+        # We only care about peaks, but simplifying to close proximity for speed
+        touches = np.sum(diff < (line_values * tolerance))
+    else:
+        diff = np.abs(actual_values - line_values)
+        touches = np.sum(diff < (line_values * tolerance))
+    return touches
+
 def analyze_ticker(df):
     if len(df) < 60: return None
     
     high_idxs, low_idxs = get_pivots(df['High'], order=8)
     if len(high_idxs) < 2 or len(low_idxs) < 2: return None
 
+    # Identify the last 4 key pivots
     Ax, Cx = high_idxs[-2], high_idxs[-1]
     Ay, Cy = df['High'].iloc[Ax], df['High'].iloc[Cx]
     Bx, Dx = low_idxs[-2], low_idxs[-1]
@@ -110,16 +127,40 @@ def analyze_ticker(df):
     slope_lower = (Dy - By) / (Dx - Bx)
     intercept_lower = By - (slope_lower * Bx)
 
+    # 1. Sideways / Wedge Logic
     tolerance = 1e-4
     if slope_upper > tolerance and slope_lower > tolerance: return None
     if slope_upper < -tolerance and slope_lower < -tolerance: return None
 
+    # 2. Time Proportionality
     width_upper = Cx - Ax
     width_lower = Dx - Bx
     if width_upper == 0 or width_lower == 0: return None
-    ratio = min(width_upper, width_lower) / max(width_upper, width_lower)
-    if ratio < 0.25: return None
+    ratio_time = min(width_upper, width_lower) / max(width_upper, width_lower)
+    if ratio_time < 0.25: return None
 
+    # 3. Vertical (Price) Proportionality (NEW)
+    # Check swing sizes. 
+    # Swing 1: A (High) to B (Low) approx
+    # Swing 2: B (Low) to C (High) approx
+    # We use the absolute vertical distance between the line points to gauge wave size
+    # Width at A roughly:
+    height_A = Ay - (slope_lower * Ax + intercept_lower)
+    height_B = (slope_upper * Bx + intercept_upper) - By
+    height_C = Cy - (slope_lower * Cx + intercept_lower)
+    
+    # If any wave collapses too fast (e.g., C is < 20% of A), it's weak
+    if height_A == 0: return None
+    if (height_C / height_A) < 0.20: return None 
+    
+    # Also check B vs A directly if possible, or just Ensure average compression isn't instant
+    # A stricter check:
+    swing_AB = abs(Ay - By)
+    swing_BC = abs(Cy - By)
+    if swing_AB == 0: return None
+    if (swing_BC / swing_AB) < 0.20: return None # If B is < 20% of A, reject
+
+    # 4. Geometry & Apex
     if abs(slope_upper - slope_lower) < 1e-5: return None
     x_apex = (intercept_lower - intercept_upper) / (slope_upper - slope_lower)
     current_idx = len(df) - 1
@@ -128,14 +169,24 @@ def analyze_ticker(df):
     pattern_len = max(Cx, Dx) - min(Ax, Bx)
     if x_apex > current_idx + (pattern_len * 3): return None
 
+    # 5. Integrity
     if not check_line_integrity(df['High'], Ax, Cx, slope_upper, intercept_upper, "upper"): return None
     if not check_line_integrity(df['Low'], Bx, Dx, slope_lower, intercept_lower, "lower"): return None
 
+    # 6. Breakout Filter
     proj_upper = (slope_upper * current_idx) + intercept_upper
     proj_lower = (slope_lower * current_idx) + intercept_lower
     current_price = df['Close'].iloc[-1]
     
     if not (proj_lower <= current_price <= proj_upper): return None
+
+    # 7. Touch Counting (Prioritization)
+    # Count how many high pivots hit the upper line and low pivots hit lower line
+    # We look at the range of the pattern
+    start_search = min(Ax, Bx)
+    touches_u = count_touches(df['High'].iloc[start_search:], slope_upper, intercept_upper, "upper")
+    touches_l = count_touches(df['Low'].iloc[start_search:], slope_lower, intercept_lower, "lower")
+    total_touches = touches_u + touches_l
 
     width_pct = (proj_upper - proj_lower) / current_price
     
@@ -148,7 +199,8 @@ def analyze_ticker(df):
             "coil_width": width_pct,
             "price": current_price,
             "is_online": is_online,
-            "last_time": last_time
+            "last_time": last_time,
+            "touches": total_touches 
         }
     return None
 
@@ -161,7 +213,8 @@ def plot_triangle_clean(df, ticker, data_dict, interval_label):
     pattern_len = len(df) - pattern_start_idx
     
     raw_view_len = pattern_len * 5
-    view_len = int(max(20, min(raw_view_len, 100)))
+    # UPDATED ZOOM: Min 40, Max 200
+    view_len = int(max(40, min(raw_view_len, 200)))
     
     start_view_idx = max(0, len(df) - view_len)
     df_slice = df.iloc[start_view_idx:].copy()
@@ -189,18 +242,19 @@ def plot_triangle_clean(df, ticker, data_dict, interval_label):
     xu, yu = get_slice_vals(data_dict['pivots']['Ax'], y_vals_upper)
     xl, yl = get_slice_vals(data_dict['pivots']['Bx'], y_vals_lower)
 
-    fig.add_trace(go.Scatter(x=xu, y=yu, mode='lines', name='Resistance', line=dict(color='red', width=2)))
-    fig.add_trace(go.Scatter(x=xl, y=yl, mode='lines', name='Support', line=dict(color='green', width=2)))
+    # UPDATED COLORS: Royal Blue & Orange
+    fig.add_trace(go.Scatter(x=xu, y=yu, mode='lines', name='Resistance', line=dict(color='RoyalBlue', width=2)))
+    fig.add_trace(go.Scatter(x=xl, y=yl, mode='lines', name='Support', line=dict(color='DarkOrange', width=2)))
 
     fig.update_layout(
-        title=f"{ticker} | Coil: {data_dict['coil_width']*100:.2f}%",
+        title=f"{ticker} | Touches: {data_dict['touches']} | Coil: {data_dict['coil_width']*100:.2f}%",
         xaxis_rangeslider_visible=False,
         xaxis_type='category', height=350, margin=dict(l=10, r=10, t=30, b=10),
         xaxis=dict(tickangle=-45, nticks=10)
     )
     return fig
 
-st.set_page_config(page_title="Triangle Pro 2.7", layout="wide")
+st.set_page_config(page_title="Triangle Pro 2.8", layout="wide")
 
 if 'scan_results' not in st.session_state:
     st.session_state.scan_results = {}
@@ -210,7 +264,7 @@ if 'authenticated' not in st.session_state:
 if not st.session_state.authenticated:
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
-        st.title("🔻 Triangle Pro 2.7")
+        st.title("🔻 Triangle Pro 2.8")
         with st.form("login_form"):
             password = st.text_input("Enter Access Code", type="password")
             if st.form_submit_button("Unlock Dashboard", type="primary"):
@@ -253,8 +307,8 @@ else:
             st.session_state.authenticated = False
             st.rerun()
 
-    st.title(f"🔻 Triangle Finder Pro 2.7")
-    st.caption(f"Market: {asset_choice} | Timeframe: {timeframe_choice} | Strict Breakout Filter On")
+    st.title(f"🔻 Triangle Finder Pro 2.8")
+    st.caption(f"Market: {asset_choice} | Timeframe: {timeframe_choice} | Sorted by Confidence (Touches)")
 
     def process_ticker(ticker, data_source, config):
         try:
@@ -266,7 +320,7 @@ else:
             match = analyze_ticker(df)
             if match:
                 fig = plot_triangle_clean(df, ticker, match, config['label'])
-                item = {"ticker": ticker, "data": match, "fig": fig}
+                item = {"ticker": ticker, "data": match, "fig": fig, "touches": match['touches']}
                 is_stock = ticker not in NON_STOCK_ASSETS
                 return (match['is_online'], is_stock, item)
             return None
@@ -292,6 +346,11 @@ else:
                                 is_on, is_stk, item = res
                                 if is_on: results["on_s" if is_stk else "on_r"].append(item)
                                 else: results["off_s" if is_stk else "off_r"].append(item)
+                    
+                    # SORT RESULTS BY TOUCHES (DESCENDING)
+                    for key in results:
+                        results[key].sort(key=lambda x: x['touches'], reverse=True)
+                        
                     st.session_state.scan_results[scan_key] = results
             except Exception as e: st.error(f"Error: {e}")
 
