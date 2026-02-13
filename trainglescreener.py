@@ -48,13 +48,16 @@ SP_LIQUID_FNO = [
 
 NON_STOCK_ASSETS = set(CRYPTO + COMMODITIES)
 
-# Updated 1d period to 1y
 SCAN_CONFIGS = {
     "5m": {"interval": "5m", "period": "10d", "ttl": 300},
     "15m": {"interval": "15m", "period": "40d", "ttl": 900},
     "1h": {"interval": "1h", "period": "200d", "ttl": 3600},
     "1d": {"interval": "1d", "period": "1y", "ttl": 14400},
 }
+
+# ==========================================
+# 2. DATA ENGINE
+# ==========================================
 
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_market_data(tickers, period, interval):
@@ -83,7 +86,6 @@ def check_line_integrity(series, idx_start, idx_end, slope, intercept, mode="upp
     line_values = slope * x_range + intercept
     actual_values = series.iloc[idx_start : idx_end + 1].values
     tolerance = 0.003
-    
     if mode == "upper":
         violations = actual_values > (line_values * (1 + tolerance))
     else:
@@ -110,6 +112,10 @@ def count_touches(series, slope, intercept, tolerance=0.005):
     diff = np.abs(actual_values - line_values)
     touches = np.sum(diff < (line_values * tolerance))
     return touches
+
+# ==========================================
+# 3. ANALYSIS LOGIC
+# ==========================================
 
 def analyze_ticker(df):
     if len(df) < 60: return None
@@ -165,13 +171,10 @@ def analyze_ticker(df):
     if pattern_start_idx > 20:
         lookback = int(pattern_len * 1.5)
         trend_start = max(0, pattern_start_idx - lookback)
-        
         price_start = df['Close'].iloc[trend_start]
         price_end = df['Close'].iloc[pattern_start_idx]
-        
         move_pct = abs((price_end - price_start) / price_start)
         pattern_height_pct = (Ay - By) / By
-        
         df['RSI'] = calculate_rsi(df['Close'])
         current_rsi = df['RSI'].iloc[-1]
         
@@ -201,20 +204,28 @@ def analyze_ticker(df):
         }
     return None
 
+# ==========================================
+# 4. CHARTING
+# ==========================================
+
 def plot_triangle_clean(df, ticker, data_dict, interval_label):
     view_len = 200
     start_view_idx = max(0, len(df) - view_len)
     df_slice = df.iloc[start_view_idx:].copy()
     
-    date_format = "%b %d" if interval_label == "1d" else "%b %d %H:%M"
-    df_slice['date_str'] = df_slice.index.strftime(date_format)
+    # Simple, minimal date format
+    if interval_label == "1d":
+        df_slice['date_str'] = df_slice.index.strftime("%d %b") # 12 Feb
+    else:
+        df_slice['date_str'] = df_slice.index.strftime("%H:%M") # 14:30
 
     fig = go.Figure(data=[go.Ohlc(
         x=df_slice['date_str'], 
         open=df_slice['Open'], high=df_slice['High'],
         low=df_slice['Low'], close=df_slice['Close'], 
         name=ticker,
-        increasing_line_color='black', decreasing_line_color='black',
+        increasing_line_color='#26a69a', # Teal for up (Modern)
+        decreasing_line_color='#ef5350', # Soft Red for down (Modern)
         line_width=1
     )])
 
@@ -231,21 +242,27 @@ def plot_triangle_clean(df, ticker, data_dict, interval_label):
     xu, yu = get_slice_vals(data_dict['pivots']['Ax'], y_vals_upper)
     xl, yl = get_slice_vals(data_dict['pivots']['Bx'], y_vals_lower)
 
-    fig.add_trace(go.Scatter(x=xu, y=yu, mode='lines', name='Resistance', line=dict(color='RoyalBlue', width=2)))
-    fig.add_trace(go.Scatter(x=xl, y=yl, mode='lines', name='Support', line=dict(color='DarkOrange', width=2)))
+    fig.add_trace(go.Scatter(x=xu, y=yu, mode='lines', name='Res', line=dict(color='RoyalBlue', width=2)))
+    fig.add_trace(go.Scatter(x=xl, y=yl, mode='lines', name='Sup', line=dict(color='DarkOrange', width=2)))
 
     fig.update_layout(
-        title=f"{ticker} | {data_dict['wave_label']} | Touches: {data_dict['touches']}",
         xaxis_rangeslider_visible=False,
-        xaxis_type='category', height=350, margin=dict(l=10, r=10, t=30, b=10),
-        xaxis=dict(tickangle=-45, nticks=10),
-        plot_bgcolor='white', paper_bgcolor='white',
-        yaxis=dict(showgrid=True, gridcolor='lightgrey'),
-        xaxis_gridcolor='lightgrey'
+        xaxis_type='category', 
+        height=320, 
+        margin=dict(l=10, r=10, t=10, b=10),
+        xaxis=dict(tickangle=-45, nticks=8, showgrid=False),
+        yaxis=dict(showgrid=True, gridcolor='#f0f0f0'),
+        plot_bgcolor='white', 
+        paper_bgcolor='white',
+        showlegend=False
     )
     return fig
 
-st.set_page_config(page_title="Screener Pro 1.2", layout="wide")
+# ==========================================
+# 5. STREAMLIT APP
+# ==========================================
+
+st.set_page_config(page_title="Screener Pro 1.3", layout="wide", page_icon="📊")
 
 if 'scan_results' not in st.session_state:
     st.session_state.scan_results = {}
@@ -253,61 +270,53 @@ if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
-    col1, col2, col3 = st.columns([1,2,1])
+    col1, col2, col3 = st.columns([1,1,1])
     with col2:
-        st.title("🔒 Screener Pro 1.2")
+        st.title("🔒 Login")
         with st.form("login_form"):
-            password = st.text_input("Enter Access Code", type="password")
-            if st.form_submit_button("Unlock Dashboard", type="primary"):
+            password = st.text_input("Access Code", type="password")
+            if st.form_submit_button("Unlock", type="primary", use_container_width=True):
                 if password == APP_PASSWORD:
                     st.session_state.authenticated = True
                     st.rerun()
-                else: st.error("❌ Incorrect Access Code")
+                else: st.error("Invalid Code")
 else:
+    # Sidebar
     with st.sidebar:
-        st.title("⚙️ Scanner Settings")
+        st.header("⚙️ Settings")
         
-        asset_choice = st.radio(
-            "1. Select Market:",
+        asset_choice = st.selectbox(
+            "Market",
             ("All Assets", "NSE F&O Stocks", "S&P 500 Stocks", "Crypto", "Commodities")
         )
         
         timeframe_choice = st.select_slider(
-            "2. Select Timeframe:",
+            "Timeframe",
             options=["5m", "15m", "1h", "1d"],
             value="15m"
         )
         
-        if asset_choice == "All Assets":
-            ACTIVE_TICKERS = CRYPTO + COMMODITIES + LIQUID_FNO + SP_LIQUID_FNO
-        elif asset_choice == "NSE F&O Stocks":
-            ACTIVE_TICKERS = LIQUID_FNO
-        elif asset_choice == "S&P 500 Stocks":
-            ACTIVE_TICKERS = SP_LIQUID_FNO
-        elif asset_choice == "Crypto":
-            ACTIVE_TICKERS = CRYPTO
-        elif asset_choice == "Commodities":
-            ACTIVE_TICKERS = COMMODITIES
+        if asset_choice == "All Assets": ACTIVE_TICKERS = CRYPTO + COMMODITIES + LIQUID_FNO + SP_LIQUID_FNO
+        elif asset_choice == "NSE F&O Stocks": ACTIVE_TICKERS = LIQUID_FNO
+        elif asset_choice == "S&P 500 Stocks": ACTIVE_TICKERS = SP_LIQUID_FNO
+        elif asset_choice == "Crypto": ACTIVE_TICKERS = CRYPTO
+        elif asset_choice == "Commodities": ACTIVE_TICKERS = COMMODITIES
             
-        st.info(f"Loaded {len(ACTIVE_TICKERS)} Assets")
+        st.caption(f"Universe: {len(ACTIVE_TICKERS)} assets")
         
-        start_scan = st.button("🚀 Start Scan", type="primary")
-
-        st.divider()
-        if st.button("🚪 Logout"):
+        start_scan = st.button("🚀 Run Scan", type="primary", use_container_width=True)
+        if st.button("🚪 Logout", use_container_width=True):
             st.session_state.authenticated = False
             st.rerun()
 
-    st.title(f"📊 Screener Pro 1.2")
-    st.caption(f"Market: {asset_choice} | Timeframe: {timeframe_choice}")
-
+    # Main Area
+    st.title("📊 Screener Pro 1.3")
+    
     def process_ticker(ticker, data_source, config):
         try:
             if len(ACTIVE_TICKERS) > 1: df = data_source[ticker].dropna()
             else: df = data_source.dropna()
-            
             if df.empty: return None
-            
             match = analyze_ticker(df)
             if match:
                 fig = plot_triangle_clean(df, ticker, match, config['interval'])
@@ -321,57 +330,69 @@ else:
     scan_key = f"scan_{timeframe_choice}_{asset_choice}"
 
     if start_scan:
-        with st.spinner(f"Scanning {len(ACTIVE_TICKERS)} assets on {timeframe_choice}..."):
-            try:
-                data = fetch_market_data(ACTIVE_TICKERS, config['period'], config['interval'])
-                if data is None or data.empty:
-                    st.error("No data received from exchange.")
-                else:
-                    results = {"on_s": [], "on_r": [], "off_s": [], "off_r": []}
-                    with concurrent.futures.ThreadPoolExecutor() as executor:
-                        futures = {executor.submit(process_ticker, t, data, config): t for t in ACTIVE_TICKERS}
-                        for future in concurrent.futures.as_completed(futures):
-                            res = future.result()
-                            if res:
-                                is_on, is_stk, item = res
-                                if is_on: results["on_s" if is_stk else "on_r"].append(item)
-                                else: results["off_s" if is_stk else "off_r"].append(item)
+        status = st.status(f"Scanning {asset_choice} ({timeframe_choice})...", expanded=True)
+        try:
+            status.write("📥 Fetching market data...")
+            data = fetch_market_data(ACTIVE_TICKERS, config['period'], config['interval'])
+            
+            if data is None or data.empty:
+                status.error("Data fetch failed.")
+            else:
+                status.write("🧠 Analyzing patterns...")
+                results = {"on_s": [], "on_r": [], "off_s": [], "off_r": []}
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    futures = {executor.submit(process_ticker, t, data, config): t for t in ACTIVE_TICKERS}
+                    for future in concurrent.futures.as_completed(futures):
+                        res = future.result()
+                        if res:
+                            is_on, is_stk, item = res
+                            if is_on: results["on_s" if is_stk else "on_r"].append(item)
+                            else: results["off_s" if is_stk else "off_r"].append(item)
+                
+                for key in results:
+                    results[key].sort(key=lambda x: x['touches'], reverse=True)
                     
-                    for key in results:
-                        results[key].sort(key=lambda x: x['touches'], reverse=True)
-                        
-                    st.session_state.scan_results[scan_key] = results
-            except Exception as e: st.error(f"Error: {e}")
+                st.session_state.scan_results[scan_key] = results
+                status.update(label="Scan Complete!", state="complete", expanded=False)
+        except Exception as e: status.error(f"Error: {e}")
 
+    # Results Display
     if scan_key in st.session_state.scan_results:
         res = st.session_state.scan_results[scan_key]
-        total_found = len(res["on_s"]) + len(res["on_r"]) + len(res["off_s"]) + len(res["off_r"])
         
-        if total_found == 0:
-            st.info("Scan complete. No patterns found.")
+        # 1. Live Section
+        live_items = res["on_s"] + res["on_r"]
+        if live_items:
+            st.subheader(f"🟢 Live Opportunities ({len(live_items)})")
+            # Display in grid
+            cols = st.columns(3)
+            for i, item in enumerate(live_items):
+                with cols[i % 3]:
+                    # Card-like container
+                    with st.container(border=True):
+                        # Header Metrics
+                        c1, c2, c3 = st.columns([2, 1, 1])
+                        c1.markdown(f"**{item['ticker']}**")
+                        c1.caption(f"🕒 {item['data']['last_time']}")
+                        
+                        lbl = item['data']['wave_label']
+                        color = "green" if "Wave 4" in lbl else "orange"
+                        c2.markdown(f":{color}[{lbl}]")
+                        
+                        width = item['data']['coil_width']*100
+                        c3.markdown(f"**{width:.1f}%**")
+                        
+                        st.plotly_chart(item['fig'], use_container_width=True, config={'displayModeBar': False})
         else:
-            st.markdown(f"### 🟢 Live Markets ({len(res['on_s']) + len(res['on_r'])})")
-            if res["on_s"] or res["on_r"]:
-                for k, v in [("#### 🏢 Stocks", res["on_s"]), ("#### 🪙 Crypto & Commodities", res["on_r"])]:
-                    if v:
-                        st.markdown(k)
-                        cols = st.columns(3)
-                        for idx, item in enumerate(v):
-                            with cols[idx % 3]:
-                                label = item['data']['wave_label']
-                                if label == "Wave 4":
-                                    st.success(f"**{item['ticker']}** | {label}")
-                                else:
-                                    st.warning(f"**{item['ticker']}** | {label}")
-                                st.plotly_chart(item['fig'], use_container_width=True)
-            st.divider()
-            with st.expander(f"🔴 Offline Markets ({len(res['off_s']) + len(res['off_r'])})"):
-                for k, v in [("#### 🏢 Stocks", res["off_s"]), ("#### 🪙 Crypto & Commodities", res["off_r"])]:
-                    if v:
-                        st.markdown(k)
-                        cols = st.columns(3)
-                        for idx, item in enumerate(v):
-                            with cols[idx % 3]:
-                                label = item['data']['wave_label']
-                                st.warning(f"**{item['ticker']}** | {label}")
-                                st.plotly_chart(item['fig'], use_container_width=True)
+            st.info("No patterns in live markets.")
+
+        # 2. Offline Section
+        off_items = res["off_s"] + res["off_r"]
+        if off_items:
+            with st.expander(f"🔴 Closed Markets ({len(off_items)})"):
+                cols = st.columns(3)
+                for i, item in enumerate(off_items):
+                    with cols[i % 3]:
+                        with st.container(border=True):
+                            st.markdown(f"**{item['ticker']}** | {item['data']['wave_label']}")
+                            st.plotly_chart(item['fig'], use_container_width=True, config={'displayModeBar': False})
