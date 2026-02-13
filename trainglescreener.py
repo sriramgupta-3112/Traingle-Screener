@@ -219,7 +219,7 @@ if 'authenticated' not in st.session_state:
 if not st.session_state.authenticated:
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
-        st.title("🔒 Triangle Hunter Pro")
+        st.title("🔒 Triangle Hunter Pro 2.0")
         with st.form("login_form"):
             password = st.text_input("Enter Access Code", type="password")
             if st.form_submit_button("Unlock Dashboard", type="primary"):
@@ -281,3 +281,4 @@ else:
                                             st.warning(f"**{item['ticker']}** | {item['data']['last_time']}")
                                             st.plotly_chart(item['fig'], use_container_width=True)
                     except Exception as e: st.error(f"Data Error: {e}")
+
