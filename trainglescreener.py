@@ -11,15 +11,11 @@ import schedule
 import concurrent.futures
 from datetime import datetime, timedelta, timezone
 
-# ==========================================
-# 1. CONFIGURATION
-# ==========================================
 APP_PASSWORD = "JaiBabaKi"
 TELEGRAM_BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
 TELEGRAM_CHAT_ID = "YOUR_CHAT_ID_HERE"
 ENABLE_TELEGRAM = False
 
-# --- ASSET GROUPS ---
 CRYPTO = ['BTC-USD', 'ETH-USD', 'SOL-USD', 'BNB-USD', 'XRP-USD', 'DOGE-USD', 'ADA-USD']
 COMMODITIES = ['GC=F', 'SI=F', 'HG=F', 'PL=F', 'PA=F', 'CL=F', 'NG=F', 'BZ=F']
 LIQUID_FNO = [
@@ -53,19 +49,14 @@ SP_LIQUID_FNO = [
     'RTX', 'HON', 'UPS', 'UNP', 'DE', 'PG', 'PM', 'MO', 'CL'
 ]
 
-# Helper to classify for coloring
 NON_STOCK_ASSETS = set(CRYPTO + COMMODITIES)
 
-SCAN_CONFIGS = [
-    {"label": "5m",  "interval": "5m",  "period": "3d",   "resample": None, "ttl": 300},
-    {"label": "15m", "interval": "15m", "period": "10d",  "resample": None, "ttl": 900},
-    {"label": "1h",  "interval": "1h",  "period": "40d",  "resample": None, "ttl": 3600},
-    {"label": "4h",  "interval": "1h",  "period": "200d", "resample": "4h", "ttl": 14400},
-]
-
-# ==========================================
-# 2. CACHED DATA FUNCTIONS
-# ==========================================
+SCAN_CONFIGS = {
+    "5m": {"interval": "5m", "period": "3d", "resample": None, "ttl": 300},
+    "15m": {"interval": "15m", "period": "10d", "resample": None, "ttl": 900},
+    "1h": {"interval": "1h", "period": "40d", "resample": None, "ttl": 3600},
+    "4h": {"interval": "1h", "period": "200d", "resample": "4h", "ttl": 14400},
+}
 
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_market_data(tickers, period, interval):
@@ -73,10 +64,6 @@ def fetch_market_data(tickers, period, interval):
         return yf.download(tickers, period=period, interval=interval, group_by='ticker', progress=False, threads=True)
     except Exception as e:
         return None
-
-# ==========================================
-# 3. CORE LOGIC
-# ==========================================
 
 def get_pivots(series, order=8):
     values = series.values
@@ -127,18 +114,15 @@ def analyze_ticker(df):
     slope_lower = (Dy - By) / (Dx - Bx)
     intercept_lower = By - (slope_lower * Bx)
 
-    # === SIDEWAYS ENFORCEMENT ===
     tolerance = 1e-4
-    if slope_upper > tolerance and slope_lower > tolerance: return None # Rising Wedge
-    if slope_upper < -tolerance and slope_lower < -tolerance: return None # Falling Wedge
+    if slope_upper > tolerance and slope_lower > tolerance: return None
+    if slope_upper < -tolerance and slope_lower < -tolerance: return None
 
-    # PROPORTIONALITY
     width_upper = Cx - Ax
     width_lower = Dx - Bx
     if width_upper == 0 or width_lower == 0: return None
     ratio = min(width_upper, width_lower) / max(width_upper, width_lower)
     if ratio < 0.25: return None
-    # === END ===
 
     if abs(slope_upper - slope_lower) < 1e-5: return None
     x_apex = (intercept_lower - intercept_upper) / (slope_upper - slope_lower)
@@ -217,11 +201,7 @@ def plot_triangle_clean(df, ticker, data_dict, interval_label):
     )
     return fig
 
-# ==========================================
-# 4. STREAMLIT UI
-# ==========================================
-
-st.set_page_config(page_title="Triangle Pro 2.4", layout="wide")
+st.set_page_config(page_title="Triangle Pro 2.5", layout="wide")
 
 if 'scan_results' not in st.session_state:
     st.session_state.scan_results = {}
@@ -231,7 +211,7 @@ if 'authenticated' not in st.session_state:
 if not st.session_state.authenticated:
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
-        st.title("🔻 Triangle Pro 2.4")
+        st.title("🔻 Triangle Pro 2.5")
         with st.form("login_form"):
             password = st.text_input("Enter Access Code", type="password")
             if st.form_submit_button("Unlock Dashboard", type="primary"):
@@ -240,15 +220,20 @@ if not st.session_state.authenticated:
                     st.rerun()
                 else: st.error("❌ Incorrect Access Code")
 else:
-    # --- SIDEBAR SELECTION ---
     with st.sidebar:
         st.title("⚙️ Scanner Settings")
+        
         asset_choice = st.radio(
-            "Select Market:",
+            "1. Select Market:",
             ("All Assets", "NSE F&O Stocks", "S&P 500 Stocks", "Crypto", "Commodities")
         )
         
-        # LOGIC TO SET ACTIVE LIST
+        timeframe_choice = st.select_slider(
+            "2. Select Timeframe:",
+            options=["5m", "15m", "1h", "4h"],
+            value="15m"
+        )
+        
         if asset_choice == "All Assets":
             ACTIVE_TICKERS = CRYPTO + COMMODITIES + LIQUID_FNO + SP_LIQUID_FNO
         elif asset_choice == "NSE F&O Stocks":
@@ -260,14 +245,17 @@ else:
         elif asset_choice == "Commodities":
             ACTIVE_TICKERS = COMMODITIES
             
-        st.info(f"Scanning {len(ACTIVE_TICKERS)} Assets")
+        st.info(f"Loaded {len(ACTIVE_TICKERS)} Assets")
+        
+        start_scan = st.button("🚀 Start Scan", type="primary")
+
+        st.divider()
         if st.button("🚪 Logout"):
             st.session_state.authenticated = False
             st.rerun()
 
-    st.title(f"🔻 Triangle Pro 2.4 ({asset_choice})")
-    
-    tabs = st.tabs(["⚡ 5 Min", "⏱️ 15 Min", "hourly 1 Hour", "📅 4 Hour"])
+    st.title(f"🔻 Triangle Finder Pro 2.5")
+    st.caption(f"Market: {asset_choice} | Timeframe: {timeframe_choice}")
 
     def process_ticker(ticker, data_source, config):
         try:
@@ -285,53 +273,53 @@ else:
             return None
         except: return None
 
-    for i, config in enumerate(SCAN_CONFIGS):
-        with tabs[i]:
-            scan_key = f"scan_{config['label']}_{asset_choice}" # Unique key per asset class
-            
-            if st.button(f"Start {config['label']} Scan ({asset_choice})", key=f"btn_{i}", type="primary"):
-                with st.spinner(f"Scanning {len(ACTIVE_TICKERS)} assets..."):
-                    try:
-                        data = fetch_market_data(ACTIVE_TICKERS, config['period'], config['interval'])
-                        if data is None or data.empty:
-                            st.error("No data received.")
-                        else:
-                            results = {"on_s": [], "on_r": [], "off_s": [], "off_r": []}
-                            with concurrent.futures.ThreadPoolExecutor() as executor:
-                                futures = {executor.submit(process_ticker, t, data, config): t for t in ACTIVE_TICKERS}
-                                for future in concurrent.futures.as_completed(futures):
-                                    res = future.result()
-                                    if res:
-                                        is_on, is_stk, item = res
-                                        if is_on: results["on_s" if is_stk else "on_r"].append(item)
-                                        else: results["off_s" if is_stk else "off_r"].append(item)
-                            st.session_state.scan_results[scan_key] = results
-                    except Exception as e: st.error(f"Error: {e}")
+    config = SCAN_CONFIGS[timeframe_choice]
+    scan_key = f"scan_{timeframe_choice}_{asset_choice}"
 
-            if scan_key in st.session_state.scan_results:
-                res = st.session_state.scan_results[scan_key]
-                total_found = len(res["on_s"]) + len(res["on_r"]) + len(res["off_s"]) + len(res["off_r"])
-                
-                if total_found == 0:
-                    st.info("Scan complete. No patterns found.")
+    if start_scan:
+        with st.spinner(f"Scanning {len(ACTIVE_TICKERS)} assets on {timeframe_choice}..."):
+            try:
+                data = fetch_market_data(ACTIVE_TICKERS, config['period'], config['interval'])
+                if data is None or data.empty:
+                    st.error("No data received from exchange.")
                 else:
-                    st.markdown(f"### 🟢 Live Markets ({len(res['on_s']) + len(res['on_r'])})")
-                    if res["on_s"] or res["on_r"]:
-                        for k, v in [("#### 🏢 Stocks", res["on_s"]), ("#### 🪙 Crypto & Commodities", res["on_r"])]:
-                            if v:
-                                st.markdown(k)
-                                cols = st.columns(3)
-                                for idx, item in enumerate(v):
-                                    with cols[idx % 3]:
-                                        st.success(f"**{item['ticker']}** | {item['data']['last_time']}")
-                                        st.plotly_chart(item['fig'], use_container_width=True)
-                    st.divider()
-                    with st.expander(f"🔴 Offline Markets ({len(res['off_s']) + len(res['off_r'])})"):
-                        for k, v in [("#### 🏢 Stocks", res["off_s"]), ("#### 🪙 Crypto & Commodities", res["off_r"])]:
-                            if v:
-                                st.markdown(k)
-                                cols = st.columns(3)
-                                for idx, item in enumerate(v):
-                                    with cols[idx % 3]:
-                                        st.warning(f"**{item['ticker']}** | {item['data']['last_time']}")
-                                        st.plotly_chart(item['fig'], use_container_width=True)
+                    results = {"on_s": [], "on_r": [], "off_s": [], "off_r": []}
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        config['label'] = timeframe_choice
+                        futures = {executor.submit(process_ticker, t, data, config): t for t in ACTIVE_TICKERS}
+                        for future in concurrent.futures.as_completed(futures):
+                            res = future.result()
+                            if res:
+                                is_on, is_stk, item = res
+                                if is_on: results["on_s" if is_stk else "on_r"].append(item)
+                                else: results["off_s" if is_stk else "off_r"].append(item)
+                    st.session_state.scan_results[scan_key] = results
+            except Exception as e: st.error(f"Error: {e}")
+
+    if scan_key in st.session_state.scan_results:
+        res = st.session_state.scan_results[scan_key]
+        total_found = len(res["on_s"]) + len(res["on_r"]) + len(res["off_s"]) + len(res["off_r"])
+        
+        if total_found == 0:
+            st.info("Scan complete. No patterns found.")
+        else:
+            st.markdown(f"### 🟢 Live Markets ({len(res['on_s']) + len(res['on_r'])})")
+            if res["on_s"] or res["on_r"]:
+                for k, v in [("#### 🏢 Stocks", res["on_s"]), ("#### 🪙 Crypto & Commodities", res["on_r"])]:
+                    if v:
+                        st.markdown(k)
+                        cols = st.columns(3)
+                        for idx, item in enumerate(v):
+                            with cols[idx % 3]:
+                                st.success(f"**{item['ticker']}** | {item['data']['last_time']}")
+                                st.plotly_chart(item['fig'], use_container_width=True)
+            st.divider()
+            with st.expander(f"🔴 Offline Markets ({len(res['off_s']) + len(res['off_r'])})"):
+                for k, v in [("#### 🏢 Stocks", res["off_s"]), ("#### 🪙 Crypto & Commodities", res["off_r"])]:
+                    if v:
+                        st.markdown(k)
+                        cols = st.columns(3)
+                        for idx, item in enumerate(v):
+                            with cols[idx % 3]:
+                                st.warning(f"**{item['ticker']}** | {item['data']['last_time']}")
+                                st.plotly_chart(item['fig'], use_container_width=True)
