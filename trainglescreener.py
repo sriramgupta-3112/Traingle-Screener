@@ -210,7 +210,11 @@ def plot_triangle_clean(df, ticker, data_dict, interval_label):
     start_view_idx = max(0, len(df) - view_len)
     df_slice = df.iloc[start_view_idx:].copy()
     
-    date_format = "%d %H:%M" if interval_label in ["5m", "15m"] else "%b %d"
+    if interval_label == "1d":
+        date_format = "%b %d"
+    else:
+        date_format = "%b %d %H:%M"
+        
     df_slice['date_str'] = df_slice.index.strftime(date_format)
 
     fig = go.Figure(data=[go.Ohlc(
@@ -218,7 +222,8 @@ def plot_triangle_clean(df, ticker, data_dict, interval_label):
         open=df_slice['Open'], high=df_slice['High'],
         low=df_slice['Low'], close=df_slice['Close'], 
         name=ticker,
-        increasing_line_color='black', decreasing_line_color='black'
+        increasing_line_color='black', decreasing_line_color='black',
+        line_width=1
     )])
 
     x_indices = np.arange(len(df))
@@ -242,11 +247,13 @@ def plot_triangle_clean(df, ticker, data_dict, interval_label):
         xaxis_rangeslider_visible=False,
         xaxis_type='category', height=350, margin=dict(l=10, r=10, t=30, b=10),
         xaxis=dict(tickangle=-45, nticks=10),
-        plot_bgcolor='white', paper_bgcolor='white'
+        plot_bgcolor='white', paper_bgcolor='white',
+        yaxis=dict(showgrid=True, gridcolor='lightgrey'),
+        xaxis_gridcolor='lightgrey'
     )
     return fig
 
-st.set_page_config(page_title="Triangle Pro 3.4", layout="wide")
+st.set_page_config(page_title="Triangle Pro 3.5", layout="wide")
 
 if 'scan_results' not in st.session_state:
     st.session_state.scan_results = {}
@@ -256,7 +263,7 @@ if 'authenticated' not in st.session_state:
 if not st.session_state.authenticated:
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
-        st.title("🔻 Triangle Pro 3.4")
+        st.title("🔻 Triangle Pro 3.5")
         with st.form("login_form"):
             password = st.text_input("Enter Access Code", type="password")
             if st.form_submit_button("Unlock Dashboard", type="primary"):
@@ -299,8 +306,8 @@ else:
             st.session_state.authenticated = False
             st.rerun()
 
-    st.title(f"🔻 Triangle Finder Pro 3.4")
-    st.caption(f"Market: {asset_choice} | Timeframe: {timeframe_choice} | Zigzag Filter: ON")
+    st.title(f"🔻 Triangle Finder Pro 3.5")
+    st.caption(f"Market: {asset_choice} | Timeframe: {timeframe_choice} | Fixed Chart Engine")
 
     def process_ticker(ticker, data_source, config):
         try:
@@ -308,7 +315,6 @@ else:
             else: df = data_source.dropna()
             
             if df.empty: return None
-            # Resampling logic removed as strict timeframes are used
             match = analyze_ticker(df)
             if match:
                 fig = plot_triangle_clean(df, ticker, match, config['interval'])
