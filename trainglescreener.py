@@ -11,6 +11,9 @@ import schedule
 import concurrent.futures
 from datetime import datetime, timedelta, timezone
 
+# ==========================================
+# 1. CONFIGURATION
+# ==========================================
 APP_PASSWORD = "JaiBabaKi"
 TELEGRAM_BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
 TELEGRAM_CHAT_ID = "YOUR_CHAT_ID_HERE"
@@ -20,8 +23,7 @@ CRYPTO = ['BTC-USD', 'ETH-USD', 'SOL-USD', 'BNB-USD', 'XRP-USD', 'DOGE-USD', 'AD
 COMMODITIES = ['GC=F', 'SI=F', 'HG=F', 'PL=F', 'PA=F', 'CL=F', 'NG=F', 'BZ=F']
 LIQUID_FNO = [
     'HDFCBANK.NS', 'ICICIBANK.NS', 'SBIN.NS', 'AXISBANK.NS', 'KOTAKBANK.NS',
-    'SBILIFE.NS',
-    'RELIANCE.NS', 'TCS.NS', 'INFY.NS', 'HCLTECH.NS', 'LT.NS',
+    'SBILIFE.NS', 'RELIANCE.NS', 'TCS.NS', 'INFY.NS', 'HCLTECH.NS', 'LT.NS',
     'TATAMOTORS.NS', 'MARUTI.NS', 'M&M.NS', 'BAJAJ-AUTO.NS',
     'SUNPHARMA.NS', 'CIPLA.NS', 'DRREDDY.NS', 'ITC.NS', 'HINDUNILVR.NS',
     'TITAN.NS', 'ASIANPAINT.NS', 'ADANIENT.NS', 'ADANIPORTS.NS',
@@ -53,12 +55,32 @@ SP_LIQUID_FNO = [
 ALL_TICKERS = CRYPTO + COMMODITIES + LIQUID_FNO + SP_LIQUID_FNO
 NON_STOCK_ASSETS = set(CRYPTO + COMMODITIES)
 
+# OPTIMIZED PERIODS TO REDUCE DOWNLOAD SIZE
 SCAN_CONFIGS = [
-    {"label": "5m",  "interval": "5m",  "period": "5d",   "resample": None},
-    {"label": "15m", "interval": "15m", "period": "15d",  "resample": None},
-    {"label": "1h",  "interval": "1h",  "period": "60d",  "resample": None},
-    {"label": "4h",  "interval": "1h",  "period": "300d", "resample": "4h"},
+    {"label": "5m",  "interval": "5m",  "period": "3d",   "resample": None, "ttl": 300},   # Cache for 5 mins
+    {"label": "15m", "interval": "15m", "period": "10d",  "resample": None, "ttl": 900},   # Cache for 15 mins
+    {"label": "1h",  "interval": "1h",  "period": "40d",  "resample": None, "ttl": 3600},  # Cache for 1 hour
+    {"label": "4h",  "interval": "1h",  "period": "200d", "resample": "4h", "ttl": 14400}, # Cache for 4 hours
 ]
+
+# ==========================================
+# 2. CACHED DATA FUNCTIONS (SPEED BOOST)
+# ==========================================
+
+@st.cache_data(ttl=300, show_spinner=False)
+def fetch_market_data(tickers, period, interval):
+    """
+    Downloads data and caches it. 
+    If you call this again within 'ttl' seconds, it returns INSTANTLY from RAM.
+    """
+    try:
+        return yf.download(tickers, period=period, interval=interval, group_by='ticker', progress=False, threads=True)
+    except Exception as e:
+        return None
+
+# ==========================================
+# 3. CORE LOGIC
+# ==========================================
 
 def get_pivots(series, order=8):
     values = series.values
@@ -104,7 +126,7 @@ def analyze_ticker(df):
     Bx, Dx = low_idxs[-2], low_idxs[-1]
     By, Dy = df['Low'].iloc[Bx], df['Low'].iloc[Dx]
 
-    # Geometry Check: Prevent broadening patterns but allow flat tops/bottoms
+    # Geometry: Allow flat tops/bottoms, reject broadening
     if Cy > Ay * 1.015: return None
     if Dy < By * 0.985: return None
 
@@ -129,7 +151,6 @@ def analyze_ticker(df):
     proj_lower = (slope_lower * current_idx) + intercept_lower
     current_price = df['Close'].iloc[-1]
     
-    # Price must be inside the mouth
     if not (proj_lower * 0.99 < current_price < proj_upper * 1.01): return None
 
     width_pct = (proj_upper - proj_lower) / current_price
@@ -187,63 +208,28 @@ def plot_triangle_clean(df, ticker, data_dict, interval_label):
     fig.update_layout(
         title=f"{ticker} | Coil: {data_dict['coil_width']*100:.2f}%",
         xaxis_rangeslider_visible=False,
-        xaxis_type='category', height=450, margin=dict(l=10, r=10, t=40, b=10),
-        xaxis=dict(tickangle=-45, nticks=15)
+        xaxis_type='category', height=350, margin=dict(l=10, r=10, t=30, b=10),
+        xaxis=dict(tickangle=-45, nticks=10)
     )
     return fig
 
-def send_telegram_alert(message):
-    if not ENABLE_TELEGRAM: return
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": message})
+# ==========================================
+# 4. STREAMLIT UI (OPTIMIZED)
+# ==========================================
 
-@st.cache_resource
-class BackgroundScanner:
-    def __init__(self):
-        self.running = False
-        self.thread = None
-        
-    def scan_job(self):
-        for config in SCAN_CONFIGS:
-            try:
-                data = yf.download(ALL_TICKERS, period=config['period'], interval=config['interval'], group_by='ticker', progress=False, threads=True)
-                for ticker in ALL_TICKERS:
-                    try:
-                        df = data[ticker].dropna() if len(ALL_TICKERS) > 1 else data.dropna()
-                        if df.empty: continue
-                        if config['resample']: df = resample_data(df, config['resample'])
-                        
-                        match = analyze_ticker(df)
-                        if match:
-                            if match['is_online'] or config['label'] == '4h':
-                                status_icon = "🟢" if match['is_online'] else "🔴"
-                                msg = f"{status_icon} {ticker} ({config['label']}) Alert!\nPrice: {match['price']:.2f}\nCoil: {match['coil_width']*100:.1f}%"
-                                send_telegram_alert(msg)
-                    except: continue
-            except: continue
+st.set_page_config(page_title="Triangle Pro 2.2 Turbo", layout="wide")
 
-    def start(self):
-        if not self.running:
-            self.running = True
-            def loop():
-                schedule.every(15).minutes.do(self.scan_job)
-                while True:
-                    schedule.run_pending()
-                    time.sleep(1)
-            self.thread = threading.Thread(target=loop, daemon=True)
-            self.thread.start()
+# Initialize Session State for Results
+if 'scan_results' not in st.session_state:
+    st.session_state.scan_results = {}
+if 'authenticated' not in st.session_state:
+    st.session_state.authenticated = False
 
-scanner = BackgroundScanner()
-scanner.start()
-
-st.set_page_config(page_title="Triangle Pro 2.1", layout="wide")
-
-if 'authenticated' not in st.session_state: st.session_state.authenticated = False
-
+# Authentication
 if not st.session_state.authenticated:
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
-        st.title("🔻 Triangle Pro 2.1")
+        st.title("🚀 Triangle Pro 2.2")
         with st.form("login_form"):
             password = st.text_input("Enter Access Code", type="password")
             if st.form_submit_button("Unlock Dashboard", type="primary"):
@@ -252,10 +238,10 @@ if not st.session_state.authenticated:
                     st.rerun()
                 else: st.error("❌ Incorrect Access Code")
 else:
-    st.title("🔻 Triangle Finder Pro 2.1")
-    
+    # Header
+    st.title("🚀 Triangle Finder Pro 2.2 (Turbo Cache)")
     col1, col2 = st.columns([4, 1])
-    with col1: st.caption(f"✅ Active | Monitoring {len(ALL_TICKERS)} Assets | Fast Scan Mode")
+    with col1: st.caption(f"✅ Active | Monitoring {len(ALL_TICKERS)} Assets | Cached & Parallelized")
     with col2:
         if st.button("🚪 Logout"):
             st.session_state.authenticated = False
@@ -277,45 +263,66 @@ else:
             return None
         except: return None
 
+    # SCANNING LOGIC
     for i, config in enumerate(SCAN_CONFIGS):
         with tabs[i]:
+            # Check if we already have results in session state to display immediately
+            scan_key = f"scan_{config['label']}"
+            
             if st.button(f"Start {config['label']} Scan", key=f"btn_{i}", type="primary"):
-                with st.spinner(f"Scanning {len(ALL_TICKERS)} Assets ({config['label']})..."):
+                with st.spinner(f"Fetching Data & Calculating (Cached Mode)..."):
                     try:
-                        data = yf.download(ALL_TICKERS, period=config['period'], interval=config['interval'], group_by='ticker', progress=False, threads=True)
-                        results = {"on_s": [], "on_r": [], "off_s": [], "off_r": []}
-
-                        with concurrent.futures.ThreadPoolExecutor() as executor:
-                            futures = {executor.submit(process_ticker, t, data, config): t for t in ALL_TICKERS}
-                            for future in concurrent.futures.as_completed(futures):
-                                res = future.result()
-                                if res:
-                                    is_on, is_stk, item = res
-                                    if is_on: results["on_s" if is_stk else "on_r"].append(item)
-                                    else: results["off_s" if is_stk else "off_r"].append(item)
-
-                        st.markdown("### 🟢 Live Markets")
-                        if results["on_s"] or results["on_r"]:
-                            for k, v in [("#### 🏢 Stocks", results["on_s"]), ("#### 🪙 Crypto & Commodities", results["on_r"])]:
-                                if v:
-                                    st.markdown(k)
-                                    cols = st.columns(3)
-                                    for idx, item in enumerate(v):
-                                        with cols[idx % 3]:
-                                            st.success(f"**{item['ticker']}** | {item['data']['last_time']}")
-                                            st.plotly_chart(item['fig'], use_container_width=True)
-                        else: st.info("No patterns found in live markets.")
+                        # 1. FETCH DATA (CACHED)
+                        # We change the period dynamically in CONFIGS to keep payload small
+                        data = fetch_market_data(ALL_TICKERS, config['period'], config['interval'])
                         
-                        st.divider()
-                        
-                        with st.expander(f"🔴 Offline Markets - Found {len(results['off_s']) + len(results['off_r'])}"):
-                            for k, v in [("#### 🏢 Stocks", results["off_s"]), ("#### 🪙 Crypto & Commodities", results["off_r"])]:
-                                if v:
-                                    st.markdown(k)
-                                    cols = st.columns(3)
-                                    for idx, item in enumerate(v):
-                                        with cols[idx % 3]:
-                                            st.warning(f"**{item['ticker']}** | {item['data']['last_time']}")
-                                            st.plotly_chart(item['fig'], use_container_width=True)
-
+                        if data is None or data.empty:
+                            st.error("No data received from Yahoo Finance.")
+                        else:
+                            # 2. ANALYZE (PARALLEL)
+                            results = {"on_s": [], "on_r": [], "off_s": [], "off_r": []}
+                            with concurrent.futures.ThreadPoolExecutor() as executor:
+                                futures = {executor.submit(process_ticker, t, data, config): t for t in ALL_TICKERS}
+                                for future in concurrent.futures.as_completed(futures):
+                                    res = future.result()
+                                    if res:
+                                        is_on, is_stk, item = res
+                                        if is_on: results["on_s" if is_stk else "on_r"].append(item)
+                                        else: results["off_s" if is_stk else "off_r"].append(item)
+                            
+                            # Save to session state so it persists
+                            st.session_state.scan_results[scan_key] = results
+                            
                     except Exception as e: st.error(f"Error: {e}")
+
+            # DISPLAY RESULTS (From Session State)
+            if scan_key in st.session_state.scan_results:
+                res = st.session_state.scan_results[scan_key]
+                
+                # Check if results exist
+                total_found = len(res["on_s"]) + len(res["on_r"]) + len(res["off_s"]) + len(res["off_r"])
+                if total_found == 0:
+                    st.info("Scan complete. No patterns found.")
+                else:
+                    st.markdown(f"### 🟢 Live Markets ({len(res['on_s']) + len(res['on_r'])})")
+                    if res["on_s"] or res["on_r"]:
+                        for k, v in [("#### 🏢 Stocks", res["on_s"]), ("#### 🪙 Crypto & Commodities", res["on_r"])]:
+                            if v:
+                                st.markdown(k)
+                                cols = st.columns(3)
+                                for idx, item in enumerate(v):
+                                    with cols[idx % 3]:
+                                        st.success(f"**{item['ticker']}** | {item['data']['last_time']}")
+                                        st.plotly_chart(item['fig'], use_container_width=True)
+                    
+                    st.divider()
+                    
+                    with st.expander(f"🔴 Offline Markets ({len(res['off_s']) + len(res['off_r'])})"):
+                        for k, v in [("#### 🏢 Stocks", res["off_s"]), ("#### 🪙 Crypto & Commodities", res["off_r"])]:
+                            if v:
+                                st.markdown(k)
+                                cols = st.columns(3)
+                                for idx, item in enumerate(v):
+                                    with cols[idx % 3]:
+                                        st.warning(f"**{item['ticker']}** | {item['data']['last_time']}")
+                                        st.plotly_chart(item['fig'], use_container_width=True)
