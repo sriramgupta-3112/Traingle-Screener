@@ -48,10 +48,10 @@ SP_LIQUID_FNO = [
 NON_STOCK_ASSETS = set(CRYPTO + COMMODITIES)
 
 SCAN_CONFIGS = {
-    "5m": {"interval": "5m", "period": "3d", "resample": None, "ttl": 300},
-    "15m": {"interval": "15m", "period": "10d", "resample": None, "ttl": 900},
-    "1h": {"interval": "1h", "period": "40d", "resample": None, "ttl": 3600},
-    "4h": {"interval": "1h", "period": "200d", "resample": "4h", "ttl": 14400},
+    "5m": {"interval": "5m", "period": "5d", "resample": None, "ttl": 300},
+    "15m": {"interval": "15m", "period": "15d", "resample": None, "ttl": 900},
+    "1h": {"interval": "1h", "period": "60d", "resample": None, "ttl": 3600},
+    "4h": {"interval": "1h", "period": "300d", "resample": "4h", "ttl": 14400},
 }
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -60,6 +60,17 @@ def fetch_market_data(tickers, period, interval):
         return yf.download(tickers, period=period, interval=interval, group_by='ticker', progress=False, threads=True)
     except Exception as e:
         return None
+
+# ==========================================
+# EXPERT SYSTEM: INDICATORS
+# ==========================================
+
+def calculate_rsi(series, period=14):
+    delta = series.diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+    rs = gain / loss
+    return 100 - (100 / (1 + rs))
 
 def get_pivots(series, order=8):
     values = series.values
@@ -95,19 +106,11 @@ def check_market_status(df):
     return is_online, time_str
 
 def count_touches(series, slope, intercept, mode, tolerance=0.005):
-    """Counts how many pivot points touch or are very close to the trendline."""
     indices = np.arange(len(series))
     line_values = slope * indices + intercept
     actual_values = series.values
-    
-    if mode == "upper":
-        # Check highs that are close to the line (within tolerance)
-        diff = np.abs(actual_values - line_values)
-        # We only care about peaks, but simplifying to close proximity for speed
-        touches = np.sum(diff < (line_values * tolerance))
-    else:
-        diff = np.abs(actual_values - line_values)
-        touches = np.sum(diff < (line_values * tolerance))
+    diff = np.abs(actual_values - line_values)
+    touches = np.sum(diff < (line_values * tolerance))
     return touches
 
 def analyze_ticker(df):
@@ -116,7 +119,6 @@ def analyze_ticker(df):
     high_idxs, low_idxs = get_pivots(df['High'], order=8)
     if len(high_idxs) < 2 or len(low_idxs) < 2: return None
 
-    # Identify the last 4 key pivots
     Ax, Cx = high_idxs[-2], high_idxs[-1]
     Ay, Cy = df['High'].iloc[Ax], df['High'].iloc[Cx]
     Bx, Dx = low_idxs[-2], low_idxs[-1]
@@ -139,26 +141,11 @@ def analyze_ticker(df):
     ratio_time = min(width_upper, width_lower) / max(width_upper, width_lower)
     if ratio_time < 0.25: return None
 
-    # 3. Vertical (Price) Proportionality (NEW)
-    # Check swing sizes. 
-    # Swing 1: A (High) to B (Low) approx
-    # Swing 2: B (Low) to C (High) approx
-    # We use the absolute vertical distance between the line points to gauge wave size
-    # Width at A roughly:
+    # 3. Vertical Proportionality
     height_A = Ay - (slope_lower * Ax + intercept_lower)
-    height_B = (slope_upper * Bx + intercept_upper) - By
     height_C = Cy - (slope_lower * Cx + intercept_lower)
-    
-    # If any wave collapses too fast (e.g., C is < 20% of A), it's weak
     if height_A == 0: return None
     if (height_C / height_A) < 0.20: return None 
-    
-    # Also check B vs A directly if possible, or just Ensure average compression isn't instant
-    # A stricter check:
-    swing_AB = abs(Ay - By)
-    swing_BC = abs(Cy - By)
-    if swing_AB == 0: return None
-    if (swing_BC / swing_AB) < 0.20: return None # If B is < 20% of A, reject
 
     # 4. Geometry & Apex
     if abs(slope_upper - slope_lower) < 1e-5: return None
@@ -180,9 +167,36 @@ def analyze_ticker(df):
     
     if not (proj_lower <= current_price <= proj_upper): return None
 
-    # 7. Touch Counting (Prioritization)
-    # Count how many high pivots hit the upper line and low pivots hit lower line
-    # We look at the range of the pattern
+    # 7. Wave Labeling (Expert Logic)
+    pattern_start_idx = min(Ax, Bx)
+    wave_label = "Neutral / Unclear"
+    
+    if pattern_start_idx > 20:
+        # Check Trend Velocity before pattern
+        lookback = int(pattern_len * 1.5)
+        trend_start = max(0, pattern_start_idx - lookback)
+        
+        price_start = df['Close'].iloc[trend_start]
+        price_end = df['Close'].iloc[pattern_start_idx]
+        
+        move_pct = abs((price_end - price_start) / price_start)
+        pattern_height_pct = (Ay - By) / By
+        
+        # Check RSI
+        df['RSI'] = calculate_rsi(df['Close'])
+        current_rsi = df['RSI'].iloc[-1]
+        
+        # Logic: 
+        # Wave 4 = Strong Move (>1.5x pattern height) + RSI Cooling (35-65)
+        # Wave B = Weak Move or Extreme RSI
+        
+        if move_pct > (pattern_height_pct * 1.5) and (35 < current_rsi < 65):
+            trend_dir = "Bullish" if price_end > price_start else "Bearish"
+            wave_label = f"🌊 Potential Wave 4 ({trend_dir})"
+        elif move_pct < pattern_height_pct:
+            wave_label = "⚠️ Potential Wave B (Weak Trend)"
+
+    # 8. Touch Counting
     start_search = min(Ax, Bx)
     touches_u = count_touches(df['High'].iloc[start_search:], slope_upper, intercept_upper, "upper")
     touches_l = count_touches(df['Low'].iloc[start_search:], slope_lower, intercept_lower, "lower")
@@ -200,7 +214,8 @@ def analyze_ticker(df):
             "price": current_price,
             "is_online": is_online,
             "last_time": last_time,
-            "touches": total_touches 
+            "touches": total_touches,
+            "wave_label": wave_label
         }
     return None
 
@@ -213,7 +228,6 @@ def plot_triangle_clean(df, ticker, data_dict, interval_label):
     pattern_len = len(df) - pattern_start_idx
     
     raw_view_len = pattern_len * 5
-    # UPDATED ZOOM: Min 40, Max 200
     view_len = int(max(40, min(raw_view_len, 200)))
     
     start_view_idx = max(0, len(df) - view_len)
@@ -222,7 +236,8 @@ def plot_triangle_clean(df, ticker, data_dict, interval_label):
     date_format = "%d %H:%M" if interval_label in ["5m", "15m"] else "%b %d"
     df_slice['date_str'] = df_slice.index.strftime(date_format)
 
-    fig = go.Figure(data=[go.Candlestick(
+    # SWITCH TO OHLC BARS
+    fig = go.Figure(data=[go.Ohlc(
         x=df_slice['date_str'], 
         open=df_slice['Open'], high=df_slice['High'],
         low=df_slice['Low'], close=df_slice['Close'], 
@@ -242,19 +257,18 @@ def plot_triangle_clean(df, ticker, data_dict, interval_label):
     xu, yu = get_slice_vals(data_dict['pivots']['Ax'], y_vals_upper)
     xl, yl = get_slice_vals(data_dict['pivots']['Bx'], y_vals_lower)
 
-    # UPDATED COLORS: Royal Blue & Orange
     fig.add_trace(go.Scatter(x=xu, y=yu, mode='lines', name='Resistance', line=dict(color='RoyalBlue', width=2)))
     fig.add_trace(go.Scatter(x=xl, y=yl, mode='lines', name='Support', line=dict(color='DarkOrange', width=2)))
 
     fig.update_layout(
-        title=f"{ticker} | Touches: {data_dict['touches']} | Coil: {data_dict['coil_width']*100:.2f}%",
+        title=f"{ticker} | {data_dict['wave_label']} | Touches: {data_dict['touches']}",
         xaxis_rangeslider_visible=False,
         xaxis_type='category', height=350, margin=dict(l=10, r=10, t=30, b=10),
         xaxis=dict(tickangle=-45, nticks=10)
     )
     return fig
 
-st.set_page_config(page_title="Triangle Pro 2.8", layout="wide")
+st.set_page_config(page_title="Triangle Pro 3.0", layout="wide")
 
 if 'scan_results' not in st.session_state:
     st.session_state.scan_results = {}
@@ -264,7 +278,7 @@ if 'authenticated' not in st.session_state:
 if not st.session_state.authenticated:
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
-        st.title("🔻 Triangle Pro 2.8")
+        st.title("🔻 Triangle Pro 3.0")
         with st.form("login_form"):
             password = st.text_input("Enter Access Code", type="password")
             if st.form_submit_button("Unlock Dashboard", type="primary"):
@@ -307,8 +321,8 @@ else:
             st.session_state.authenticated = False
             st.rerun()
 
-    st.title(f"🔻 Triangle Finder Pro 2.8")
-    st.caption(f"Market: {asset_choice} | Timeframe: {timeframe_choice} | Sorted by Confidence (Touches)")
+    st.title(f"🔻 Triangle Finder Pro 3.0")
+    st.caption(f"Market: {asset_choice} | Timeframe: {timeframe_choice} | Wave Analysis: ON")
 
     def process_ticker(ticker, data_source, config):
         try:
@@ -347,7 +361,6 @@ else:
                                 if is_on: results["on_s" if is_stk else "on_r"].append(item)
                                 else: results["off_s" if is_stk else "off_r"].append(item)
                     
-                    # SORT RESULTS BY TOUCHES (DESCENDING)
                     for key in results:
                         results[key].sort(key=lambda x: x['touches'], reverse=True)
                         
@@ -369,7 +382,11 @@ else:
                         cols = st.columns(3)
                         for idx, item in enumerate(v):
                             with cols[idx % 3]:
-                                st.success(f"**{item['ticker']}** | {item['data']['last_time']}")
+                                label = item['data']['wave_label']
+                                if "Wave 4" in label:
+                                    st.success(f"**{item['ticker']}** | {label}")
+                                else:
+                                    st.warning(f"**{item['ticker']}** | {label}")
                                 st.plotly_chart(item['fig'], use_container_width=True)
             st.divider()
             with st.expander(f"🔴 Offline Markets ({len(res['off_s']) + len(res['off_r'])})"):
@@ -379,5 +396,6 @@ else:
                         cols = st.columns(3)
                         for idx, item in enumerate(v):
                             with cols[idx % 3]:
-                                st.warning(f"**{item['ticker']}** | {item['data']['last_time']}")
+                                label = item['data']['wave_label']
+                                st.warning(f"**{item['ticker']}** | {label}")
                                 st.plotly_chart(item['fig'], use_container_width=True)
