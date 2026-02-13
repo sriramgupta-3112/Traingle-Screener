@@ -60,13 +60,6 @@ SCAN_CONFIGS = [
     {"label": "4h",  "interval": "1h",  "period": "300d", "resample": "4h"},
 ]
 
-def calculate_rsi(series, period=14):
-    delta = series.diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-    rs = gain / loss
-    return 100 - (100 / (1 + rs))
-
 def get_pivots(series, order=8):
     values = series.values
     if len(values) == 0: return [], []
@@ -111,6 +104,7 @@ def analyze_ticker(df):
     Bx, Dx = low_idxs[-2], low_idxs[-1]
     By, Dy = df['Low'].iloc[Bx], df['Low'].iloc[Dx]
 
+    # Geometry Check: Prevent broadening patterns but allow flat tops/bottoms
     if Cy > Ay * 1.015: return None
     if Dy < By * 0.985: return None
 
@@ -123,6 +117,7 @@ def analyze_ticker(df):
     x_apex = (intercept_lower - intercept_upper) / (slope_upper - slope_lower)
     current_idx = len(df) - 1
     
+    # Apex Integrity
     if x_apex < current_idx: return None
     pattern_len = max(Cx, Dx) - min(Ax, Bx)
     if x_apex > current_idx + (pattern_len * 3): return None
@@ -133,35 +128,9 @@ def analyze_ticker(df):
     proj_upper = (slope_upper * current_idx) + intercept_upper
     proj_lower = (slope_lower * current_idx) + intercept_lower
     current_price = df['Close'].iloc[-1]
-    if not (proj_lower * 0.99 < current_price < proj_upper * 1.01): return None
-
-    pattern_start_idx = min(Ax, Bx)
     
-    if pattern_start_idx < 20: 
-        wave_label = "Insufficient Data"
-    else:
-        lookback = int(pattern_len * 1.5) 
-        trend_start = max(0, pattern_start_idx - lookback)
-        
-        price_start_trend = df['Close'].iloc[trend_start]
-        price_at_pattern = df['Close'].iloc[pattern_start_idx]
-        
-        trend_move_pct = (price_at_pattern - price_start_trend) / price_start_trend
-        triangle_height_pct = (Ay - By) / By
-        
-        df['RSI'] = calculate_rsi(df['Close'])
-        rsi_current = df['RSI'].iloc[-1]
-        
-        is_strong_trend = abs(trend_move_pct) > (triangle_height_pct * 1.5)
-        is_rsi_neutral = 35 < rsi_current < 65
-        
-        if is_strong_trend and is_rsi_neutral:
-            direction = "Bullish" if trend_move_pct > 0 else "Bearish"
-            wave_label = f"🌊 Potential Wave 4 ({direction})"
-        elif not is_strong_trend:
-             wave_label = "⚠️ Potential Wave B / Neutral"
-        else:
-            wave_label = "Unknown Structure"
+    # Price must be inside the mouth
+    if not (proj_lower * 0.99 < current_price < proj_upper * 1.01): return None
 
     width_pct = (proj_upper - proj_lower) / current_price
     
@@ -174,8 +143,7 @@ def analyze_ticker(df):
             "coil_width": width_pct,
             "price": current_price,
             "is_online": is_online,
-            "last_time": last_time,
-            "wave_label": wave_label
+            "last_time": last_time
         }
     return None
 
@@ -216,9 +184,8 @@ def plot_triangle_clean(df, ticker, data_dict, interval_label):
     fig.add_trace(go.Scatter(x=xu, y=yu, mode='lines', name='Resistance', line=dict(color='red', width=2)))
     fig.add_trace(go.Scatter(x=xl, y=yl, mode='lines', name='Support', line=dict(color='green', width=2)))
 
-    title_text = f"{ticker} | {data_dict['wave_label']} | Coil: {data_dict['coil_width']*100:.2f}%"
     fig.update_layout(
-        title=title_text,
+        title=f"{ticker} | Coil: {data_dict['coil_width']*100:.2f}%",
         xaxis_rangeslider_visible=False,
         xaxis_type='category', height=450, margin=dict(l=10, r=10, t=40, b=10),
         xaxis=dict(tickangle=-45, nticks=15)
@@ -250,9 +217,8 @@ class BackgroundScanner:
                         if match:
                             if match['is_online'] or config['label'] == '4h':
                                 status_icon = "🟢" if match['is_online'] else "🔴"
-                                if "Wave 4" in match['wave_label']:
-                                    msg = f"{status_icon} {ticker} ({config['label']}) ELLIOTT ALERT!\n{match['wave_label']}\nPrice: {match['price']:.2f}"
-                                    send_telegram_alert(msg)
+                                msg = f"{status_icon} {ticker} ({config['label']}) Alert!\nPrice: {match['price']:.2f}\nCoil: {match['coil_width']*100:.1f}%"
+                                send_telegram_alert(msg)
                     except: continue
             except: continue
 
@@ -270,14 +236,14 @@ class BackgroundScanner:
 scanner = BackgroundScanner()
 scanner.start()
 
-st.set_page_config(page_title="Triangle Finder Pro 3.0 (Elliott Wave)", layout="wide")
+st.set_page_config(page_title="Triangle Pro 2.1", layout="wide")
 
 if 'authenticated' not in st.session_state: st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
-        st.title("🌊 Triangle Pro 3.0")
+        st.title("🔻 Triangle Pro 2.1")
         with st.form("login_form"):
             password = st.text_input("Enter Access Code", type="password")
             if st.form_submit_button("Unlock Dashboard", type="primary"):
@@ -286,10 +252,10 @@ if not st.session_state.authenticated:
                     st.rerun()
                 else: st.error("❌ Incorrect Access Code")
 else:
-    st.title("🌊 Triangle Finder Pro 3.0 (Elliott Wave Edition)")
+    st.title("🔻 Triangle Finder Pro 2.1")
     
     col1, col2 = st.columns([4, 1])
-    with col1: st.caption(f"✅ Active | Monitoring {len(ALL_TICKERS)} Assets | Wave 4 Detection Enabled")
+    with col1: st.caption(f"✅ Active | Monitoring {len(ALL_TICKERS)} Assets | Fast Scan Mode")
     with col2:
         if st.button("🚪 Logout"):
             st.session_state.authenticated = False
@@ -314,7 +280,7 @@ else:
     for i, config in enumerate(SCAN_CONFIGS):
         with tabs[i]:
             if st.button(f"Start {config['label']} Scan", key=f"btn_{i}", type="primary"):
-                with st.spinner(f"Analyzing Waves & Geometry ({config['label']})..."):
+                with st.spinner(f"Scanning {len(ALL_TICKERS)} Assets ({config['label']})..."):
                     try:
                         data = yf.download(ALL_TICKERS, period=config['period'], interval=config['interval'], group_by='ticker', progress=False, threads=True)
                         results = {"on_s": [], "on_r": [], "off_s": [], "off_r": []}
@@ -336,11 +302,7 @@ else:
                                     cols = st.columns(3)
                                     for idx, item in enumerate(v):
                                         with cols[idx % 3]:
-                                            label = item['data']['wave_label']
-                                            if "Wave 4" in label:
-                                                st.success(f"**{item['ticker']}** | {label}")
-                                            else:
-                                                st.warning(f"**{item['ticker']}** | {label}")
+                                            st.success(f"**{item['ticker']}** | {item['data']['last_time']}")
                                             st.plotly_chart(item['fig'], use_container_width=True)
                         else: st.info("No patterns found in live markets.")
                         
@@ -353,11 +315,7 @@ else:
                                     cols = st.columns(3)
                                     for idx, item in enumerate(v):
                                         with cols[idx % 3]:
-                                            label = item['data']['wave_label']
-                                            if "Wave 4" in label:
-                                                st.success(f"**{item['ticker']}** | {label}")
-                                            else:
-                                                st.warning(f"**{item['ticker']}** | {label}")
+                                            st.warning(f"**{item['ticker']}** | {item['data']['last_time']}")
                                             st.plotly_chart(item['fig'], use_container_width=True)
 
                     except Exception as e: st.error(f"Error: {e}")
