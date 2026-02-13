@@ -4,10 +4,6 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from scipy.signal import argrelextrema
-import time
-import threading
-import requests
-import schedule
 import concurrent.futures
 from datetime import datetime, timedelta, timezone
 
@@ -139,7 +135,7 @@ def analyze_ticker(df):
     proj_lower = (slope_lower * current_idx) + intercept_lower
     current_price = df['Close'].iloc[-1]
     
-    if not (proj_lower * 0.99 < current_price < proj_upper * 1.01): return None
+    if not (proj_lower <= current_price <= proj_upper): return None
 
     width_pct = (proj_upper - proj_lower) / current_price
     
@@ -163,8 +159,11 @@ def resample_data(df, interval):
 def plot_triangle_clean(df, ticker, data_dict, interval_label):
     pattern_start_idx = min(data_dict['pivots']['Ax'], data_dict['pivots']['Bx'])
     pattern_len = len(df) - pattern_start_idx
-    history_buffer = int(pattern_len * 4) 
-    start_view_idx = max(0, pattern_start_idx - history_buffer)
+    
+    raw_view_len = pattern_len * 5
+    view_len = int(max(20, min(raw_view_len, 60)))
+    
+    start_view_idx = max(0, len(df) - view_len)
     df_slice = df.iloc[start_view_idx:].copy()
     
     date_format = "%d %H:%M" if interval_label in ["5m", "15m"] else "%b %d"
@@ -201,7 +200,7 @@ def plot_triangle_clean(df, ticker, data_dict, interval_label):
     )
     return fig
 
-st.set_page_config(page_title="Triangle Pro 2.5", layout="wide")
+st.set_page_config(page_title="Triangle Pro 2.6", layout="wide")
 
 if 'scan_results' not in st.session_state:
     st.session_state.scan_results = {}
@@ -211,7 +210,7 @@ if 'authenticated' not in st.session_state:
 if not st.session_state.authenticated:
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
-        st.title("🔻 Triangle Pro 2.5")
+        st.title("🔻 Triangle Pro 2.6")
         with st.form("login_form"):
             password = st.text_input("Enter Access Code", type="password")
             if st.form_submit_button("Unlock Dashboard", type="primary"):
@@ -254,8 +253,8 @@ else:
             st.session_state.authenticated = False
             st.rerun()
 
-    st.title(f"🔻 Triangle Finder Pro 2.5")
-    st.caption(f"Market: {asset_choice} | Timeframe: {timeframe_choice}")
+    st.title(f"🔻 Triangle Finder Pro 2.6")
+    st.caption(f"Market: {asset_choice} | Timeframe: {timeframe_choice} | Strict Breakout Filter On")
 
     def process_ticker(ticker, data_source, config):
         try:
