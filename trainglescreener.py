@@ -61,10 +61,6 @@ def fetch_market_data(tickers, period, interval):
     except Exception as e:
         return None
 
-# ==========================================
-# EXPERT SYSTEM: INDICATORS
-# ==========================================
-
 def calculate_rsi(series, period=14):
     delta = series.diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
@@ -129,26 +125,33 @@ def analyze_ticker(df):
     slope_lower = (Dy - By) / (Dx - Bx)
     intercept_lower = By - (slope_lower * Bx)
 
-    # 1. Sideways / Wedge Logic
+    # 1. Zigzag & Channel Filter (Convergence Check)
+    # Triangles MUST squeeze. Channels/Zigzags are parallel.
+    # Calculate convergence rate (difference in slopes)
+    convergence = abs(slope_upper - slope_lower)
+    
+    # If lines are nearly parallel (convergence < 0.0002), it's likely a Channel/Flag/Zigzag
+    if convergence < 0.0002: return None 
+
+    # 2. Sideways / Wedge Logic
     tolerance = 1e-4
     if slope_upper > tolerance and slope_lower > tolerance: return None
     if slope_upper < -tolerance and slope_lower < -tolerance: return None
 
-    # 2. Time Proportionality
+    # 3. Time Proportionality
     width_upper = Cx - Ax
     width_lower = Dx - Bx
     if width_upper == 0 or width_lower == 0: return None
     ratio_time = min(width_upper, width_lower) / max(width_upper, width_lower)
     if ratio_time < 0.25: return None
 
-    # 3. Vertical Proportionality
+    # 4. Vertical Proportionality
     height_A = Ay - (slope_lower * Ax + intercept_lower)
     height_C = Cy - (slope_lower * Cx + intercept_lower)
     if height_A == 0: return None
     if (height_C / height_A) < 0.20: return None 
 
-    # 4. Geometry & Apex
-    if abs(slope_upper - slope_lower) < 1e-5: return None
+    # 5. Geometry & Apex
     x_apex = (intercept_lower - intercept_upper) / (slope_upper - slope_lower)
     current_idx = len(df) - 1
     
@@ -156,23 +159,22 @@ def analyze_ticker(df):
     pattern_len = max(Cx, Dx) - min(Ax, Bx)
     if x_apex > current_idx + (pattern_len * 3): return None
 
-    # 5. Integrity
+    # 6. Integrity
     if not check_line_integrity(df['High'], Ax, Cx, slope_upper, intercept_upper, "upper"): return None
     if not check_line_integrity(df['Low'], Bx, Dx, slope_lower, intercept_lower, "lower"): return None
 
-    # 6. Breakout Filter
+    # 7. Breakout Filter
     proj_upper = (slope_upper * current_idx) + intercept_upper
     proj_lower = (slope_lower * current_idx) + intercept_lower
     current_price = df['Close'].iloc[-1]
     
     if not (proj_lower <= current_price <= proj_upper): return None
 
-    # 7. Wave Labeling (Expert Logic)
+    # 8. Wave Labeling
     pattern_start_idx = min(Ax, Bx)
     wave_label = "Neutral / Unclear"
     
     if pattern_start_idx > 20:
-        # Check Trend Velocity before pattern
         lookback = int(pattern_len * 1.5)
         trend_start = max(0, pattern_start_idx - lookback)
         
@@ -182,13 +184,8 @@ def analyze_ticker(df):
         move_pct = abs((price_end - price_start) / price_start)
         pattern_height_pct = (Ay - By) / By
         
-        # Check RSI
         df['RSI'] = calculate_rsi(df['Close'])
         current_rsi = df['RSI'].iloc[-1]
-        
-        # Logic: 
-        # Wave 4 = Strong Move (>1.5x pattern height) + RSI Cooling (35-65)
-        # Wave B = Weak Move or Extreme RSI
         
         if move_pct > (pattern_height_pct * 1.5) and (35 < current_rsi < 65):
             trend_dir = "Bullish" if price_end > price_start else "Bearish"
@@ -196,7 +193,7 @@ def analyze_ticker(df):
         elif move_pct < pattern_height_pct:
             wave_label = "⚠️ Potential Wave B (Weak Trend)"
 
-    # 8. Touch Counting
+    # 9. Touch Counting
     start_search = min(Ax, Bx)
     touches_u = count_touches(df['High'].iloc[start_search:], slope_upper, intercept_upper, "upper")
     touches_l = count_touches(df['Low'].iloc[start_search:], slope_lower, intercept_lower, "lower")
@@ -227,8 +224,8 @@ def plot_triangle_clean(df, ticker, data_dict, interval_label):
     pattern_start_idx = min(data_dict['pivots']['Ax'], data_dict['pivots']['Bx'])
     pattern_len = len(df) - pattern_start_idx
     
-    raw_view_len = pattern_len * 5
-    view_len = int(max(40, min(raw_view_len, 200)))
+    # FIXED 100 Candle View
+    view_len = 100
     
     start_view_idx = max(0, len(df) - view_len)
     df_slice = df.iloc[start_view_idx:].copy()
@@ -236,7 +233,7 @@ def plot_triangle_clean(df, ticker, data_dict, interval_label):
     date_format = "%d %H:%M" if interval_label in ["5m", "15m"] else "%b %d"
     df_slice['date_str'] = df_slice.index.strftime(date_format)
 
-    # SWITCH TO OHLC BARS
+    # OHLC BARS
     fig = go.Figure(data=[go.Ohlc(
         x=df_slice['date_str'], 
         open=df_slice['Open'], high=df_slice['High'],
@@ -268,7 +265,7 @@ def plot_triangle_clean(df, ticker, data_dict, interval_label):
     )
     return fig
 
-st.set_page_config(page_title="Triangle Pro 3.0", layout="wide")
+st.set_page_config(page_title="Triangle Pro 3.1", layout="wide")
 
 if 'scan_results' not in st.session_state:
     st.session_state.scan_results = {}
@@ -278,7 +275,7 @@ if 'authenticated' not in st.session_state:
 if not st.session_state.authenticated:
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
-        st.title("🔻 Triangle Pro 3.0")
+        st.title("🔻 Triangle Pro 3.1")
         with st.form("login_form"):
             password = st.text_input("Enter Access Code", type="password")
             if st.form_submit_button("Unlock Dashboard", type="primary"):
@@ -321,7 +318,7 @@ else:
             st.session_state.authenticated = False
             st.rerun()
 
-    st.title(f"🔻 Triangle Finder Pro 3.0")
+    st.title(f"🔻 Triangle Finder Pro 3.1")
     st.caption(f"Market: {asset_choice} | Timeframe: {timeframe_choice} | Wave Analysis: ON")
 
     def process_ticker(ticker, data_source, config):
