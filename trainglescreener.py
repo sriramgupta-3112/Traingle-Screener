@@ -123,4 +123,287 @@ def analyze_ticker(df):
     high_idxs, low_idxs = get_pivots(df['High'], order=8)
     if len(high_idxs) < 2 or len(low_idxs) < 2: return None
 
-    Ax, Cx = high_idxs[-
+    Ax, Cx = high_idxs[-2], high_idxs[-1]
+    Ay, Cy = df['High'].iloc[Ax], df['High'].iloc[Cx]
+    Bx, Dx = low_idxs[-2], low_idxs[-1]
+    By, Dy = df['Low'].iloc[Bx], df['Low'].iloc[Dx]
+
+    slope_upper = (Cy - Ay) / (Cx - Ax)
+    intercept_upper = Ay - (slope_upper * Ax)
+    slope_lower = (Dy - By) / (Dx - Bx)
+    intercept_lower = By - (slope_lower * Bx)
+
+    # 1. ZIGZAG/CHANNEL FILTER (Convergence Check)
+    # If lines are parallel (slope diff is tiny), it's a Channel/Zigzag.
+    # We require a minimum degree of convergence to call it a Triangle.
+    convergence_rate = abs(slope_upper - slope_lower)
+    if convergence_rate < 0.0002: return None 
+
+    # 2. DIAGONAL/WEDGE FILTER
+    # Reject if both slopes are up or both are down (Wedges)
+    tolerance = 1e-4
+    if slope_upper > tolerance and slope_lower > tolerance: return None
+    if slope_upper < -tolerance and slope_lower < -tolerance: return None
+
+    # 3. Time Proportionality
+    width_upper = Cx - Ax
+    width_lower = Dx - Bx
+    if width_upper == 0 or width_lower == 0: return None
+    ratio_time = min(width_upper, width_lower) / max(width_upper, width_lower)
+    if ratio_time < 0.25: return None
+
+    # 4. Vertical Proportionality
+    height_A = Ay - (slope_lower * Ax + intercept_lower)
+    height_C = Cy - (slope_lower * Cx + intercept_lower)
+    if height_A == 0: return None
+    if (height_C / height_A) < 0.20: return None 
+
+    # 5. Geometry & Apex
+    x_apex = (intercept_lower - intercept_upper) / (slope_upper - slope_lower)
+    current_idx = len(df) - 1
+    
+    if x_apex < current_idx: return None
+    pattern_len = max(Cx, Dx) - min(Ax, Bx)
+    if x_apex > current_idx + (pattern_len * 3): return None
+
+    # 6. Integrity
+    if not check_line_integrity(df['High'], Ax, Cx, slope_upper, intercept_upper, "upper"): return None
+    if not check_line_integrity(df['Low'], Bx, Dx, slope_lower, intercept_lower, "lower"): return None
+
+    # 7. Breakout Filter (Must be inside)
+    proj_upper = (slope_upper * current_idx) + intercept_upper
+    proj_lower = (slope_lower * current_idx) + intercept_lower
+    current_price = df['Close'].iloc[-1]
+    
+    if not (proj_lower <= current_price <= proj_upper): return None
+
+    # 8. Wave Labeling
+    pattern_start_idx = min(Ax, Bx)
+    wave_label = "Neutral / Unclear"
+    
+    if pattern_start_idx > 20:
+        lookback = int(pattern_len * 1.5)
+        trend_start = max(0, pattern_start_idx - lookback)
+        
+        price_start = df['Close'].iloc[trend_start]
+        price_end = df['Close'].iloc[pattern_start_idx]
+        
+        move_pct = abs((price_end - price_start) / price_start)
+        pattern_height_pct = (Ay - By) / By
+        
+        df['RSI'] = calculate_rsi(df['Close'])
+        current_rsi = df['RSI'].iloc[-1]
+        
+        if move_pct > (pattern_height_pct * 1.5) and (35 < current_rsi < 65):
+            trend_dir = "Bullish" if price_end > price_start else "Bearish"
+            wave_label = f"🌊 Potential Wave 4 ({trend_dir})"
+        elif move_pct < pattern_height_pct:
+            wave_label = "⚠️ Potential Wave B (Weak Trend)"
+
+    # 9. Touch Counting
+    start_search = min(Ax, Bx)
+    touches_u = count_touches(df['High'].iloc[start_search:], slope_upper, intercept_upper, "upper")
+    touches_l = count_touches(df['Low'].iloc[start_search:], slope_lower, intercept_lower, "lower")
+    total_touches = touches_u + touches_l
+
+    width_pct = (proj_upper - proj_lower) / current_price
+    
+    if width_pct < 0.06:
+        is_online, last_time = check_market_status(df)
+        return {
+            "pivots": {"Ax": Ax, "Ay": Ay, "Cx": Cx, "Cy": Cy, "Bx": Bx, "By": By, "Dx": Dx, "Dy": Dy},
+            "slopes": {"upper": slope_upper, "lower": slope_lower},
+            "intercepts": {"upper": intercept_upper, "lower": intercept_lower},
+            "coil_width": width_pct,
+            "price": current_price,
+            "is_online": is_online,
+            "last_time": last_time,
+            "touches": total_touches,
+            "wave_label": wave_label
+        }
+    return None
+
+def resample_data(df, interval):
+    logic = {'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last', 'Volume': 'sum'}
+    return df.resample(interval).agg(logic).dropna()
+
+def plot_triangle_clean(df, ticker, data_dict, interval_label):
+    pattern_start_idx = min(data_dict['pivots']['Ax'], data_dict['pivots']['Bx'])
+    
+    # FORCE 200 CANDLES (If available)
+    view_len = 200
+    start_view_idx = max(0, len(df) - view_len)
+    df_slice = df.iloc[start_view_idx:].copy()
+    
+    date_format = "%d %H:%M" if interval_label in ["5m", "15m"] else "%b %d"
+    df_slice['date_str'] = df_slice.index.strftime(date_format)
+
+    # ALL BLACK OHLC BARS
+    fig = go.Figure(data=[go.Ohlc(
+        x=df_slice['date_str'], 
+        open=df_slice['Open'], high=df_slice['High'],
+        low=df_slice['Low'], close=df_slice['Close'], 
+        name=ticker,
+        increasing_line_color='black', decreasing_line_color='black'
+    )])
+
+    x_indices = np.arange(len(df))
+    y_vals_upper = data_dict['slopes']['upper'] * x_indices + data_dict['intercepts']['upper']
+    y_vals_lower = data_dict['slopes']['lower'] * x_indices + data_dict['intercepts']['lower']
+
+    def get_slice_vals(idx_start, y_vals):
+        valid_indices = [i for i in range(idx_start, len(df)) if i >= start_view_idx]
+        x_plot = [df_slice['date_str'].iloc[i - start_view_idx] for i in valid_indices]
+        y_plot = y_vals[valid_indices]
+        return x_plot, y_plot
+
+    xu, yu = get_slice_vals(data_dict['pivots']['Ax'], y_vals_upper)
+    xl, yl = get_slice_vals(data_dict['pivots']['Bx'], y_vals_lower)
+
+    fig.add_trace(go.Scatter(x=xu, y=yu, mode='lines', name='Resistance', line=dict(color='RoyalBlue', width=2)))
+    fig.add_trace(go.Scatter(x=xl, y=yl, mode='lines', name='Support', line=dict(color='DarkOrange', width=2)))
+
+    fig.update_layout(
+        title=f"{ticker} | {data_dict['wave_label']} | Touches: {data_dict['touches']}",
+        xaxis_rangeslider_visible=False,
+        xaxis_type='category', height=350, margin=dict(l=10, r=10, t=30, b=10),
+        xaxis=dict(tickangle=-45, nticks=10),
+        plot_bgcolor='white', paper_bgcolor='white'
+    )
+    return fig
+
+# ==========================================
+# 4. STREAMLIT UI
+# ==========================================
+
+st.set_page_config(page_title="Triangle Pro 3.3", layout="wide")
+
+if 'scan_results' not in st.session_state:
+    st.session_state.scan_results = {}
+if 'authenticated' not in st.session_state:
+    st.session_state.authenticated = False
+
+if not st.session_state.authenticated:
+    col1, col2, col3 = st.columns([1,2,1])
+    with col2:
+        st.title("🔻 Triangle Pro 3.3")
+        with st.form("login_form"):
+            password = st.text_input("Enter Access Code", type="password")
+            if st.form_submit_button("Unlock Dashboard", type="primary"):
+                if password == APP_PASSWORD:
+                    st.session_state.authenticated = True
+                    st.rerun()
+                else: st.error("❌ Incorrect Access Code")
+else:
+    with st.sidebar:
+        st.title("⚙️ Scanner Settings")
+        
+        asset_choice = st.radio(
+            "1. Select Market:",
+            ("All Assets", "NSE F&O Stocks", "S&P 500 Stocks", "Crypto", "Commodities")
+        )
+        
+        timeframe_choice = st.select_slider(
+            "2. Select Timeframe:",
+            options=["5m", "15m", "1h", "4h"],
+            value="15m"
+        )
+        
+        if asset_choice == "All Assets":
+            ACTIVE_TICKERS = CRYPTO + COMMODITIES + LIQUID_FNO + SP_LIQUID_FNO
+        elif asset_choice == "NSE F&O Stocks":
+            ACTIVE_TICKERS = LIQUID_FNO
+        elif asset_choice == "S&P 500 Stocks":
+            ACTIVE_TICKERS = SP_LIQUID_FNO
+        elif asset_choice == "Crypto":
+            ACTIVE_TICKERS = CRYPTO
+        elif asset_choice == "Commodities":
+            ACTIVE_TICKERS = COMMODITIES
+            
+        st.info(f"Loaded {len(ACTIVE_TICKERS)} Assets")
+        
+        start_scan = st.button("🚀 Start Scan", type="primary")
+
+        st.divider()
+        if st.button("🚪 Logout"):
+            st.session_state.authenticated = False
+            st.rerun()
+
+    st.title(f"🔻 Triangle Finder Pro 3.3")
+    st.caption(f"Market: {asset_choice} | Timeframe: {timeframe_choice} | Zigzag Filter: ON")
+
+    def process_ticker(ticker, data_source, config):
+        try:
+            if len(ACTIVE_TICKERS) > 1: df = data_source[ticker].dropna()
+            else: df = data_source.dropna()
+            
+            if df.empty: return None
+            if config['resample']: df = resample_data(df, config['resample'])
+            match = analyze_ticker(df)
+            if match:
+                fig = plot_triangle_clean(df, ticker, match, config['label'])
+                item = {"ticker": ticker, "data": match, "fig": fig, "touches": match['touches']}
+                is_stock = ticker not in NON_STOCK_ASSETS
+                return (match['is_online'], is_stock, item)
+            return None
+        except: return None
+
+    config = SCAN_CONFIGS[timeframe_choice]
+    scan_key = f"scan_{timeframe_choice}_{asset_choice}"
+
+    if start_scan:
+        with st.spinner(f"Scanning {len(ACTIVE_TICKERS)} assets on {timeframe_choice}..."):
+            try:
+                data = fetch_market_data(ACTIVE_TICKERS, config['period'], config['interval'])
+                if data is None or data.empty:
+                    st.error("No data received from exchange.")
+                else:
+                    results = {"on_s": [], "on_r": [], "off_s": [], "off_r": []}
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        config['label'] = timeframe_choice
+                        futures = {executor.submit(process_ticker, t, data, config): t for t in ACTIVE_TICKERS}
+                        for future in concurrent.futures.as_completed(futures):
+                            res = future.result()
+                            if res:
+                                is_on, is_stk, item = res
+                                if is_on: results["on_s" if is_stk else "on_r"].append(item)
+                                else: results["off_s" if is_stk else "off_r"].append(item)
+                    
+                    for key in results:
+                        results[key].sort(key=lambda x: x['touches'], reverse=True)
+                        
+                    st.session_state.scan_results[scan_key] = results
+            except Exception as e: st.error(f"Error: {e}")
+
+    if scan_key in st.session_state.scan_results:
+        res = st.session_state.scan_results[scan_key]
+        total_found = len(res["on_s"]) + len(res["on_r"]) + len(res["off_s"]) + len(res["off_r"])
+        
+        if total_found == 0:
+            st.info("Scan complete. No patterns found.")
+        else:
+            st.markdown(f"### 🟢 Live Markets ({len(res['on_s']) + len(res['on_r'])})")
+            if res["on_s"] or res["on_r"]:
+                for k, v in [("#### 🏢 Stocks", res["on_s"]), ("#### 🪙 Crypto & Commodities", res["on_r"])]:
+                    if v:
+                        st.markdown(k)
+                        cols = st.columns(3)
+                        for idx, item in enumerate(v):
+                            with cols[idx % 3]:
+                                label = item['data']['wave_label']
+                                if "Wave 4" in label:
+                                    st.success(f"**{item['ticker']}** | {label}")
+                                else:
+                                    st.warning(f"**{item['ticker']}** | {label}")
+                                st.plotly_chart(item['fig'], use_container_width=True)
+            st.divider()
+            with st.expander(f"🔴 Offline Markets ({len(res['off_s']) + len(res['off_r'])})"):
+                for k, v in [("#### 🏢 Stocks", res["off_s"]), ("#### 🪙 Crypto & Commodities", res["off_r"])]:
+                    if v:
+                        st.markdown(k)
+                        cols = st.columns(3)
+                        for idx, item in enumerate(v):
+                            with cols[idx % 3]:
+                                label = item['data']['wave_label']
+                                st.warning(f"**{item['ticker']}** | {label}")
+                                st.plotly_chart(item['fig'], use_container_width=True)
