@@ -161,7 +161,7 @@ def plot_triangle_clean(df, ticker, data_dict, interval_label):
     pattern_len = len(df) - pattern_start_idx
     
     raw_view_len = pattern_len * 5
-    view_len = int(max(20, min(raw_view_len, 60)))
+    view_len = int(max(20, min(raw_view_len, 100)))
     
     start_view_idx = max(0, len(df) - view_len)
     df_slice = df.iloc[start_view_idx:].copy()
@@ -200,7 +200,7 @@ def plot_triangle_clean(df, ticker, data_dict, interval_label):
     )
     return fig
 
-st.set_page_config(page_title="Triangle Pro 2.6", layout="wide")
+st.set_page_config(page_title="Triangle Pro 2.7", layout="wide")
 
 if 'scan_results' not in st.session_state:
     st.session_state.scan_results = {}
@@ -210,7 +210,7 @@ if 'authenticated' not in st.session_state:
 if not st.session_state.authenticated:
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
-        st.title("🔻 Triangle Pro 2.6")
+        st.title("🔻 Triangle Pro 2.7")
         with st.form("login_form"):
             password = st.text_input("Enter Access Code", type="password")
             if st.form_submit_button("Unlock Dashboard", type="primary"):
@@ -253,7 +253,7 @@ else:
             st.session_state.authenticated = False
             st.rerun()
 
-    st.title(f"🔻 Triangle Finder Pro 2.6")
+    st.title(f"🔻 Triangle Finder Pro 2.7")
     st.caption(f"Market: {asset_choice} | Timeframe: {timeframe_choice} | Strict Breakout Filter On")
 
     def process_ticker(ticker, data_source, config):
