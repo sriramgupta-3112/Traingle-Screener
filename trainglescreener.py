@@ -19,6 +19,7 @@ TELEGRAM_BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
 TELEGRAM_CHAT_ID = "YOUR_CHAT_ID_HERE"
 ENABLE_TELEGRAM = False
 
+# --- ASSET GROUPS ---
 CRYPTO = ['BTC-USD', 'ETH-USD', 'SOL-USD', 'BNB-USD', 'XRP-USD', 'DOGE-USD', 'ADA-USD']
 COMMODITIES = ['GC=F', 'SI=F', 'HG=F', 'PL=F', 'PA=F', 'CL=F', 'NG=F', 'BZ=F']
 LIQUID_FNO = [
@@ -52,10 +53,9 @@ SP_LIQUID_FNO = [
     'RTX', 'HON', 'UPS', 'UNP', 'DE', 'PG', 'PM', 'MO', 'CL'
 ]
 
-ALL_TICKERS = CRYPTO + COMMODITIES + LIQUID_FNO + SP_LIQUID_FNO
+# Helper to classify for coloring
 NON_STOCK_ASSETS = set(CRYPTO + COMMODITIES)
 
-# OPTIMIZED PERIODS
 SCAN_CONFIGS = [
     {"label": "5m",  "interval": "5m",  "period": "3d",   "resample": None, "ttl": 300},
     {"label": "15m", "interval": "15m", "period": "10d",  "resample": None, "ttl": 900},
@@ -75,7 +75,7 @@ def fetch_market_data(tickers, period, interval):
         return None
 
 # ==========================================
-# 3. CORE LOGIC (ENHANCED SIDEWAYS FILTER)
+# 3. CORE LOGIC
 # ==========================================
 
 def get_pivots(series, order=8):
@@ -127,46 +127,26 @@ def analyze_ticker(df):
     slope_lower = (Dy - By) / (Dx - Bx)
     intercept_lower = By - (slope_lower * Bx)
 
-    # === NEW LOGIC: SIDEWAYS ENFORCEMENT ===
-    
-    # 1. Eliminate Diagonals (Wedges)
-    # A Sideways Triangle MUST have opposing slopes (one up, one down) OR one flat line.
-    # Falling Wedge (Bad): Both slopes are negative.
-    # Rising Wedge (Bad): Both slopes are positive.
-    
-    # Tolerance for "Flat": +/- 0.0001
+    # === SIDEWAYS ENFORCEMENT ===
     tolerance = 1e-4
-    
-    # If both are significantly positive -> Rising Wedge (Reject)
-    if slope_upper > tolerance and slope_lower > tolerance: return None
-    
-    # If both are significantly negative -> Falling Wedge (Reject) -> FIXES DLF/GOOGL/AVGO
-    if slope_upper < -tolerance and slope_lower < -tolerance: return None
+    if slope_upper > tolerance and slope_lower > tolerance: return None # Rising Wedge
+    if slope_upper < -tolerance and slope_lower < -tolerance: return None # Falling Wedge
 
-    # 2. PROPORTIONALITY (Subwave Balance)
-    # The duration of the top swing (A->C) vs bottom swing (B->D) should be comparable.
+    # PROPORTIONALITY
     width_upper = Cx - Ax
     width_lower = Dx - Bx
-    
-    # Prevent division by zero
     if width_upper == 0 or width_lower == 0: return None
-    
-    # Ratio of smaller wave to larger wave
     ratio = min(width_upper, width_lower) / max(width_upper, width_lower)
-    
-    # If one wave is < 25% length of the other, it's malformed/lopsided
     if ratio < 0.25: return None
+    # === END ===
 
-    # === END NEW LOGIC ===
-
-    # Standard Geometry Checks
     if abs(slope_upper - slope_lower) < 1e-5: return None
     x_apex = (intercept_lower - intercept_upper) / (slope_upper - slope_lower)
     current_idx = len(df) - 1
     
-    if x_apex < current_idx: return None # Apex in past
+    if x_apex < current_idx: return None
     pattern_len = max(Cx, Dx) - min(Ax, Bx)
-    if x_apex > current_idx + (pattern_len * 3): return None # Channel-like
+    if x_apex > current_idx + (pattern_len * 3): return None
 
     if not check_line_integrity(df['High'], Ax, Cx, slope_upper, intercept_upper, "upper"): return None
     if not check_line_integrity(df['Low'], Bx, Dx, slope_lower, intercept_lower, "lower"): return None
@@ -241,7 +221,7 @@ def plot_triangle_clean(df, ticker, data_dict, interval_label):
 # 4. STREAMLIT UI
 # ==========================================
 
-st.set_page_config(page_title="Triangle Pro 2.3", layout="wide")
+st.set_page_config(page_title="Triangle Pro 2.4", layout="wide")
 
 if 'scan_results' not in st.session_state:
     st.session_state.scan_results = {}
@@ -251,7 +231,7 @@ if 'authenticated' not in st.session_state:
 if not st.session_state.authenticated:
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
-        st.title("🔻 Triangle Pro 2.3")
+        st.title("🔻 Triangle Pro 2.4")
         with st.form("login_form"):
             password = st.text_input("Enter Access Code", type="password")
             if st.form_submit_button("Unlock Dashboard", type="primary"):
@@ -260,19 +240,40 @@ if not st.session_state.authenticated:
                     st.rerun()
                 else: st.error("❌ Incorrect Access Code")
 else:
-    st.title("🔻 Triangle Finder Pro 2.3 (Sideways Logic)")
-    col1, col2 = st.columns([4, 1])
-    with col1: st.caption(f"✅ Active | Monitoring {len(ALL_TICKERS)} Assets | Diagonals Filtered")
-    with col2:
+    # --- SIDEBAR SELECTION ---
+    with st.sidebar:
+        st.title("⚙️ Scanner Settings")
+        asset_choice = st.radio(
+            "Select Market:",
+            ("All Assets", "NSE F&O Stocks", "S&P 500 Stocks", "Crypto", "Commodities")
+        )
+        
+        # LOGIC TO SET ACTIVE LIST
+        if asset_choice == "All Assets":
+            ACTIVE_TICKERS = CRYPTO + COMMODITIES + LIQUID_FNO + SP_LIQUID_FNO
+        elif asset_choice == "NSE F&O Stocks":
+            ACTIVE_TICKERS = LIQUID_FNO
+        elif asset_choice == "S&P 500 Stocks":
+            ACTIVE_TICKERS = SP_LIQUID_FNO
+        elif asset_choice == "Crypto":
+            ACTIVE_TICKERS = CRYPTO
+        elif asset_choice == "Commodities":
+            ACTIVE_TICKERS = COMMODITIES
+            
+        st.info(f"Scanning {len(ACTIVE_TICKERS)} Assets")
         if st.button("🚪 Logout"):
             st.session_state.authenticated = False
             st.rerun()
 
+    st.title(f"🔻 Triangle Pro 2.4 ({asset_choice})")
+    
     tabs = st.tabs(["⚡ 5 Min", "⏱️ 15 Min", "hourly 1 Hour", "📅 4 Hour"])
 
     def process_ticker(ticker, data_source, config):
         try:
-            df = data_source[ticker].dropna() if len(ALL_TICKERS) > 1 else data_source.dropna()
+            if len(ACTIVE_TICKERS) > 1: df = data_source[ticker].dropna()
+            else: df = data_source.dropna()
+            
             if df.empty: return None
             if config['resample']: df = resample_data(df, config['resample'])
             match = analyze_ticker(df)
@@ -286,17 +287,18 @@ else:
 
     for i, config in enumerate(SCAN_CONFIGS):
         with tabs[i]:
-            scan_key = f"scan_{config['label']}"
-            if st.button(f"Start {config['label']} Scan", key=f"btn_{i}", type="primary"):
-                with st.spinner(f"Scanning & Filtering Diagonals..."):
+            scan_key = f"scan_{config['label']}_{asset_choice}" # Unique key per asset class
+            
+            if st.button(f"Start {config['label']} Scan ({asset_choice})", key=f"btn_{i}", type="primary"):
+                with st.spinner(f"Scanning {len(ACTIVE_TICKERS)} assets..."):
                     try:
-                        data = fetch_market_data(ALL_TICKERS, config['period'], config['interval'])
+                        data = fetch_market_data(ACTIVE_TICKERS, config['period'], config['interval'])
                         if data is None or data.empty:
                             st.error("No data received.")
                         else:
                             results = {"on_s": [], "on_r": [], "off_s": [], "off_r": []}
                             with concurrent.futures.ThreadPoolExecutor() as executor:
-                                futures = {executor.submit(process_ticker, t, data, config): t for t in ALL_TICKERS}
+                                futures = {executor.submit(process_ticker, t, data, config): t for t in ACTIVE_TICKERS}
                                 for future in concurrent.futures.as_completed(futures):
                                     res = future.result()
                                     if res:
@@ -309,8 +311,9 @@ else:
             if scan_key in st.session_state.scan_results:
                 res = st.session_state.scan_results[scan_key]
                 total_found = len(res["on_s"]) + len(res["on_r"]) + len(res["off_s"]) + len(res["off_r"])
+                
                 if total_found == 0:
-                    st.info("Scan complete. No standard sideways patterns found.")
+                    st.info("Scan complete. No patterns found.")
                 else:
                     st.markdown(f"### 🟢 Live Markets ({len(res['on_s']) + len(res['on_r'])})")
                     if res["on_s"] or res["on_r"]:
