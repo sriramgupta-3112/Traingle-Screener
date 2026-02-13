@@ -7,9 +7,6 @@ from scipy.signal import argrelextrema
 import concurrent.futures
 from datetime import datetime, timedelta, timezone
 
-# ==========================================
-# 1. CONFIGURATION
-# ==========================================
 APP_PASSWORD = "JaiBabaKi"
 ENABLE_TELEGRAM = False
 
@@ -54,10 +51,6 @@ SCAN_CONFIGS = {
     "1h": {"interval": "1h", "period": "200d", "ttl": 3600},
     "1d": {"interval": "1d", "period": "1y", "ttl": 14400},
 }
-
-# ==========================================
-# 2. DATA ENGINE
-# ==========================================
 
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_market_data(tickers, period, interval):
@@ -112,10 +105,6 @@ def count_touches(series, slope, intercept, tolerance=0.005):
     diff = np.abs(actual_values - line_values)
     touches = np.sum(diff < (line_values * tolerance))
     return touches
-
-# ==========================================
-# 3. ANALYSIS LOGIC
-# ==========================================
 
 def analyze_ticker(df):
     if len(df) < 60: return None
@@ -204,20 +193,14 @@ def analyze_ticker(df):
         }
     return None
 
-# ==========================================
-# 4. CHARTING (SMART ENGINE)
-# ==========================================
-
 def plot_triangle_clean(df, ticker, data_dict, interval_label):
-    view_len = 100 
+    view_len = 200 
     start_view_idx = max(0, len(df) - view_len)
     df_slice = df.iloc[start_view_idx:].copy()
     
-    # Smart Date Formatting
     if interval_label == "1d":
         df_slice['date_str'] = df_slice.index.strftime("%d %b")
     else:
-        # For intraday, show Day + Time (e.g. 12/02 14:30)
         df_slice['date_str'] = df_slice.index.strftime("%d/%m %H:%M")
 
     fig = go.Figure(data=[go.Ohlc(
@@ -226,7 +209,7 @@ def plot_triangle_clean(df, ticker, data_dict, interval_label):
         low=df_slice['Low'], close=df_slice['Close'], 
         name=ticker,
         increasing_line_color='black', decreasing_line_color='black',
-        line_width=1.2 # Slightly thicker for visibility
+        line_width=1.2
     )])
 
     x_indices = np.arange(len(df))
@@ -250,24 +233,14 @@ def plot_triangle_clean(df, ticker, data_dict, interval_label):
         xaxis_type='category', 
         height=320, 
         margin=dict(l=5, r=5, t=5, b=5),
-        xaxis=dict(
-            nticks=6, 
-            showgrid=False,
-            tickangle=-45
-        ),
+        xaxis=dict(nticks=6, showgrid=False, tickangle=-45),
         yaxis=dict(showgrid=False),
-        plot_bgcolor='white', 
-        paper_bgcolor='white',
-        showlegend=False,
-        hovermode="x unified"
+        plot_bgcolor='white', paper_bgcolor='white',
+        showlegend=False, hovermode="x unified"
     )
     return fig
 
-# ==========================================
-# 5. STREAMLIT APP
-# ==========================================
-
-st.set_page_config(page_title="Screener Pro 1.5", layout="wide", page_icon="📊")
+st.set_page_config(page_title="Screener Pro 1.6", layout="wide", page_icon="📊")
 
 if 'scan_results' not in st.session_state:
     st.session_state.scan_results = {}
@@ -303,7 +276,7 @@ else:
             st.session_state.authenticated = False
             st.rerun()
 
-    st.title("📊 Screener Pro 1.5")
+    st.title("📊 Screener Pro 1.6")
     
     def process_ticker(ticker, data_source, config):
         try:
@@ -352,7 +325,6 @@ else:
         res = st.session_state.scan_results[scan_key]
         live_items = res["on_s"] + res["on_r"]
         
-        # 1. Live Section
         if live_items:
             st.subheader(f"🟢 Live Opportunities ({len(live_items)})")
             cols = st.columns(3)
@@ -367,13 +339,21 @@ else:
                         c2.markdown(f":{color}[{lbl}]")
                         width = item['data']['coil_width']*100
                         c3.markdown(f"**{width:.1f}%**")
+                        
                         st.plotly_chart(item['fig'], use_container_width=True, config={'displayModeBar': False})
+                        
+                        # SMART HYPERLINKING
+                        ticker_base = item['ticker'].replace(".NS", "")
+                        if ".NS" in item['ticker']:
+                            url = f"https://www.nseindia.com/get-quotes/derivatives?symbol={ticker_base}"
+                            st.markdown(f"[🔗 Option Chain]({url})")
+                        else:
+                            url = f"https://finance.yahoo.com/quote/{item['ticker']}"
+                            st.markdown(f"[🔗 Yahoo Finance]({url})")
         else:
             st.info("No patterns in live markets.")
 
-        # 2. Offline Section
         off_items = res["off_s"] + res["off_r"]
-        # AUTO-EXPAND if no live items found, so user sees results immediately
         expand_offline = len(live_items) == 0
         
         if off_items:
@@ -388,3 +368,12 @@ else:
                             color = "green" if "Wave 4" in lbl else "orange"
                             c2.markdown(f":{color}[{lbl}]")
                             st.plotly_chart(item['fig'], use_container_width=True, config={'displayModeBar': False})
+                            
+                            # SMART HYPERLINKING (OFFLINE)
+                            ticker_base = item['ticker'].replace(".NS", "")
+                            if ".NS" in item['ticker']:
+                                url = f"https://www.nseindia.com/get-quotes/derivatives?symbol={ticker_base}"
+                                st.markdown(f"[🔗 Option Chain]({url})")
+                            else:
+                                url = f"https://finance.yahoo.com/quote/{item['ticker']}"
+                                st.markdown(f"[🔗 Yahoo Finance]({url})")
