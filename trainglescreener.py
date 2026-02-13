@@ -229,7 +229,7 @@ if not st.session_state.authenticated:
                 else:
                     st.error("❌ Incorrect Access Code")
 else:
-    st.title("🔻 Triangle Hunter Pro")
+    st.title("🔻 Triangle Hunter Pro 2.0")
     c1, c2 = st.columns([4, 1])
     with c1: st.caption(f"✅ Active | Monitoring {len(ALL_TICKERS)} Assets")
     with c2: 
@@ -281,4 +281,5 @@ else:
                                             st.warning(f"**{item['ticker']}** | {item['data']['last_time']}")
                                             st.plotly_chart(item['fig'], use_container_width=True)
                     except Exception as e: st.error(f"Data Error: {e}")
+
 
