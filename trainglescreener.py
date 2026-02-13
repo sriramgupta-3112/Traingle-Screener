@@ -49,7 +49,7 @@ NON_STOCK_ASSETS = set(CRYPTO + COMMODITIES)
 
 SCAN_CONFIGS = {
     "5m": {"interval": "5m", "period": "5d", "resample": None, "ttl": 300},
-    "15m": {"interval": "15m", "period": "15d", "resample": None, "ttl": 900},
+    "15m": {"interval": "15m", "period": "20d", "resample": None, "ttl": 900},
     "1h": {"interval": "1h", "period": "60d", "resample": None, "ttl": 3600},
     "4h": {"interval": "1h", "period": "300d", "resample": "4h", "ttl": 14400},
 }
@@ -125,33 +125,24 @@ def analyze_ticker(df):
     slope_lower = (Dy - By) / (Dx - Bx)
     intercept_lower = By - (slope_lower * Bx)
 
-    # 1. Zigzag & Channel Filter (Convergence Check)
-    # Triangles MUST squeeze. Channels/Zigzags are parallel.
-    # Calculate convergence rate (difference in slopes)
     convergence = abs(slope_upper - slope_lower)
-    
-    # If lines are nearly parallel (convergence < 0.0002), it's likely a Channel/Flag/Zigzag
     if convergence < 0.0002: return None 
 
-    # 2. Sideways / Wedge Logic
     tolerance = 1e-4
     if slope_upper > tolerance and slope_lower > tolerance: return None
     if slope_upper < -tolerance and slope_lower < -tolerance: return None
 
-    # 3. Time Proportionality
     width_upper = Cx - Ax
     width_lower = Dx - Bx
     if width_upper == 0 or width_lower == 0: return None
     ratio_time = min(width_upper, width_lower) / max(width_upper, width_lower)
     if ratio_time < 0.25: return None
 
-    # 4. Vertical Proportionality
     height_A = Ay - (slope_lower * Ax + intercept_lower)
     height_C = Cy - (slope_lower * Cx + intercept_lower)
     if height_A == 0: return None
     if (height_C / height_A) < 0.20: return None 
 
-    # 5. Geometry & Apex
     x_apex = (intercept_lower - intercept_upper) / (slope_upper - slope_lower)
     current_idx = len(df) - 1
     
@@ -159,18 +150,15 @@ def analyze_ticker(df):
     pattern_len = max(Cx, Dx) - min(Ax, Bx)
     if x_apex > current_idx + (pattern_len * 3): return None
 
-    # 6. Integrity
     if not check_line_integrity(df['High'], Ax, Cx, slope_upper, intercept_upper, "upper"): return None
     if not check_line_integrity(df['Low'], Bx, Dx, slope_lower, intercept_lower, "lower"): return None
 
-    # 7. Breakout Filter
     proj_upper = (slope_upper * current_idx) + intercept_upper
     proj_lower = (slope_lower * current_idx) + intercept_lower
     current_price = df['Close'].iloc[-1]
     
     if not (proj_lower <= current_price <= proj_upper): return None
 
-    # 8. Wave Labeling
     pattern_start_idx = min(Ax, Bx)
     wave_label = "Neutral / Unclear"
     
@@ -193,7 +181,6 @@ def analyze_ticker(df):
         elif move_pct < pattern_height_pct:
             wave_label = "⚠️ Potential Wave B (Weak Trend)"
 
-    # 9. Touch Counting
     start_search = min(Ax, Bx)
     touches_u = count_touches(df['High'].iloc[start_search:], slope_upper, intercept_upper, "upper")
     touches_l = count_touches(df['Low'].iloc[start_search:], slope_lower, intercept_lower, "lower")
@@ -222,10 +209,9 @@ def resample_data(df, interval):
 
 def plot_triangle_clean(df, ticker, data_dict, interval_label):
     pattern_start_idx = min(data_dict['pivots']['Ax'], data_dict['pivots']['Bx'])
-    pattern_len = len(df) - pattern_start_idx
     
-    # FIXED 100 Candle View
-    view_len = 100
+    # FORCE 200 CANDLES
+    view_len = 200
     
     start_view_idx = max(0, len(df) - view_len)
     df_slice = df.iloc[start_view_idx:].copy()
@@ -233,12 +219,13 @@ def plot_triangle_clean(df, ticker, data_dict, interval_label):
     date_format = "%d %H:%M" if interval_label in ["5m", "15m"] else "%b %d"
     df_slice['date_str'] = df_slice.index.strftime(date_format)
 
-    # OHLC BARS
+    # OHLC BARS - BLACK COLOR
     fig = go.Figure(data=[go.Ohlc(
         x=df_slice['date_str'], 
         open=df_slice['Open'], high=df_slice['High'],
         low=df_slice['Low'], close=df_slice['Close'], 
-        name=ticker
+        name=ticker,
+        increasing_line_color='black', decreasing_line_color='black'
     )])
 
     x_indices = np.arange(len(df))
@@ -261,11 +248,13 @@ def plot_triangle_clean(df, ticker, data_dict, interval_label):
         title=f"{ticker} | {data_dict['wave_label']} | Touches: {data_dict['touches']}",
         xaxis_rangeslider_visible=False,
         xaxis_type='category', height=350, margin=dict(l=10, r=10, t=30, b=10),
-        xaxis=dict(tickangle=-45, nticks=10)
+        xaxis=dict(tickangle=-45, nticks=10),
+        plot_bgcolor='white',
+        paper_bgcolor='white'
     )
     return fig
 
-st.set_page_config(page_title="Triangle Pro 3.1", layout="wide")
+st.set_page_config(page_title="Triangle Pro 3.2", layout="wide")
 
 if 'scan_results' not in st.session_state:
     st.session_state.scan_results = {}
@@ -275,7 +264,7 @@ if 'authenticated' not in st.session_state:
 if not st.session_state.authenticated:
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
-        st.title("🔻 Triangle Pro 3.1")
+        st.title("🔻 Triangle Pro 3.2")
         with st.form("login_form"):
             password = st.text_input("Enter Access Code", type="password")
             if st.form_submit_button("Unlock Dashboard", type="primary"):
@@ -318,8 +307,8 @@ else:
             st.session_state.authenticated = False
             st.rerun()
 
-    st.title(f"🔻 Triangle Finder Pro 3.1")
-    st.caption(f"Market: {asset_choice} | Timeframe: {timeframe_choice} | Wave Analysis: ON")
+    st.title(f"🔻 Triangle Finder Pro 3.2")
+    st.caption(f"Market: {asset_choice} | Timeframe: {timeframe_choice} | 200 Candle View")
 
     def process_ticker(ticker, data_source, config):
         try:
